@@ -1220,7 +1220,8 @@ export default function App() {
         />
 
         {toastNotification && (
-            <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[150] bg-emerald-600 border border-emerald-400/40 text-white font-medium text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none">
+            <div className="fixed top-12 sm:top-14 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 border-2 border-emerald-300/80 text-white font-black text-xs sm:text-sm px-5 py-3 rounded-full shadow-[0_10px_35px_rgba(0,0,0,0.8)] flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none tracking-wide">
+                <span className="text-base sm:text-lg">🎉</span>
                 <span>{toastNotification}</span>
             </div>
         )}

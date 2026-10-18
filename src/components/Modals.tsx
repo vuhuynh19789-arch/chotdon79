@@ -4575,7 +4575,65 @@ export function LiveEfficiencyModal({
             </div>
           </div>
 
+          {/* 🚀 BẢNG THỐNG KÊ HIỆU QUẢ ĐẨY ĐƠN PANCAKE POS */}
+          <div className="bg-gradient-to-br from-[#182333] via-[#1c293d] to-[#121c29] p-4 rounded-2xl border-2 border-orange-500/40 shadow-xl shadow-orange-950/20 space-y-3">
+            <div className="flex items-center justify-between border-b border-orange-500/20 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🚀</span>
+                <div>
+                  <h4 className="font-black text-amber-300 text-sm uppercase tracking-wide flex items-center gap-1.5">
+                    <span>HIỆU QUẢ ĐẨY ĐƠN PANCAKE POS</span>
+                    <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/40 px-2 py-0.5 rounded-full font-bold">LIVE SYNC</span>
+                  </h4>
+                  <p className="text-[11px] text-gray-400">Báo cáo số đơn đẩy thành công & doanh thu đã đẩy out giỏ hàng</p>
+                </div>
+              </div>
+            </div>
 
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="bg-[#0f1722]/80 p-2.5 sm:p-3 rounded-xl border border-white/10 text-center">
+                <div className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase">Đơn Đã Đẩy</div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-0.5">
+                  {pushedOrdersCount} <span className="text-xs font-normal text-gray-400">đơn</span>
+                </div>
+              </div>
+              <div className="bg-[#0f1722]/80 p-2.5 sm:p-3 rounded-xl border border-white/10 text-center">
+                <div className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase">Doanh Thu Đẩy</div>
+                <div className="text-xl sm:text-2xl font-black text-amber-400 mt-0.5">
+                  {pushedRevenue.toLocaleString("vi-VN")}k
+                </div>
+              </div>
+              <div className="bg-[#0f1722]/80 p-2.5 sm:p-3 rounded-xl border border-white/10 text-center">
+                <div className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase">Số Cái Đã Đẩy</div>
+                <div className="text-xl sm:text-2xl font-black text-blue-400 mt-0.5">
+                  {pushedItemsCount} <span className="text-xs font-normal text-gray-400">cái</span>
+                </div>
+              </div>
+            </div>
+
+            {pushedList.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                <div className="text-[11px] font-bold text-gray-300 mb-1.5 flex items-center justify-between">
+                  <span>📋 Đơn vừa đẩy gần nhất ({pushedList.length}):</span>
+                  <span className="text-[10px] text-gray-400">Tự động cập nhật</span>
+                </div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                  {pushedList.slice(0, 5).map((item, idx) => (
+                    <div key={idx} className="bg-[#16202e] p-2 rounded-lg border border-white/5 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                        <span className="text-emerald-400 font-bold">#{item.rec.orderNumber || 'HD'}</span>
+                        <span className="font-semibold text-white truncate">@{item.user}</span>
+                        {item.nickname && <span className="text-[10px] text-gray-400 truncate">({item.nickname})</span>}
+                      </div>
+                      <div className="shrink-0 text-amber-300 font-bold font-mono">
+                        {item.rec.totalPrice || 0}k ({item.rec.totalQuantity || (item.rec.items || []).reduce((s: number, i: any) => s + (i.quantity || 1), 0)} cái)
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Customer Segments */}
           <div className="bg-[#1c242f] p-4 rounded-2xl border border-white/10 shadow-sm space-y-3">
