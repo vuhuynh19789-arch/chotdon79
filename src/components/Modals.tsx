@@ -1329,11 +1329,13 @@ export function ListModal({
   };
 
   const handlePushOrder = (user: string, platform: Platform) => {
+    const cleanU = normalizeUser(user);
     const key = getCustKey(user, platform);
-    const selCur = selectedCurrentMap[key] || new Set<number>();
-    const selPast = selectedPastMap[key] || new Set<number>();
+    const keyClean = getCustKey(cleanU, platform);
+    const selCur = selectedCurrentMap[key] || selectedCurrentMap[keyClean] || new Set<number>();
+    const selPast = selectedPastMap[key] || selectedPastMap[keyClean] || new Set<number>();
 
-    const cust = store[platform].customers[user];
+    const cust = store[platform].customers[user] || store[platform].customers[cleanU];
     const curItems = cust?.items || [];
     const pastItems = cust?.pastItems || [];
 
@@ -1358,15 +1360,19 @@ export function ListModal({
   };
 
   const clearCustomerSelection = (user: string, platform: Platform) => {
+    const cleanU = normalizeUser(user);
     const key = getCustKey(user, platform);
+    const keyClean = getCustKey(cleanU, platform);
     setSelectedCurrentMap((prev) => {
       const next = { ...prev };
       delete next[key];
+      delete next[keyClean];
       return next;
     });
     setSelectedPastMap((prev) => {
       const next = { ...prev };
       delete next[key];
+      delete next[keyClean];
       return next;
     });
   };
