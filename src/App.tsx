@@ -2,7 +2,7 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import PrintServer from "./components/PrintServer";
 import React, { useEffect, useState, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import { MoreVertical, Search as SearchIcon, Home, MessageSquare, Users, PlusCircle, Maximize, Trash2, RefreshCw, Bot, ShoppingCart, BarChart3, Radio, Tv, Bell, Sliders } from 'lucide-react';
-import { useStore, getCustomerAvatar, isGhostZeroPriceItem, scrubGhostItemsFromStore, isCustomerGheLay } from './store';
+import { useStore, getCustomerAvatar, isGhostZeroPriceItem, scrubGhostItemsFromStore, isCustomerGheLay, isCustomerNinhThuan } from './store';
 import { PLATFORMS, Platform, getShortId, normalizeUser, addRecentSearchPrice, extractPriceFromContent, removeVietnameseAccents, APP_VERSION } from './lib/core';
 import { SearchBar, SearchSuggestionItem } from './components/SearchBar';
 import { PriceModal, ManualModal, ListModal, ProfileModal, CustomersModal, LiveEfficiencyModal } from './components/Modals';
@@ -615,7 +615,7 @@ export default function App() {
 
               if (match) {
                   seenUsers.add(dedupeKey);
-                  const isNt = Boolean(pStore.ninhThuanTags?.[clean]);
+                  const isNt = isCustomerNinhThuan(pStore.ninhThuanTags, clean);
                   const isGl = isCustomerGheLay(pStore.gheLayTags, clean, pStore.tags);
                   results.push({
                       user: clean,
@@ -661,7 +661,7 @@ export default function App() {
 
                   if (match) {
                       seenUsers.add(dedupeKey);
-                      const isNt = Boolean(pStore.ninhThuanTags?.[clean]);
+                      const isNt = isCustomerNinhThuan(pStore.ninhThuanTags, clean);
                       const isGl = isCustomerGheLay(pStore.gheLayTags, clean, pStore.tags);
                       results.push({
                           user: clean,

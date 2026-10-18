@@ -38,6 +38,7 @@ import {
   getCustomerAvatar,
   isGhostZeroPriceItem,
   isCustomerGheLay,
+  isCustomerNinhThuan,
 } from "../store";
 import {
   PLATFORMS,
@@ -664,7 +665,7 @@ export function PriceModal({
             )}
           {isCustomerGheLay(store[pendingPrint.platform].gheLayTags, cleanUser, store[pendingPrint.platform].tags) ? (
             <GheLayBadge className="text-[10px]" />
-          ) : store[pendingPrint.platform].ninhThuanTags?.[cleanUser] ? (
+          ) : isCustomerNinhThuan(store[pendingPrint.platform].ninhThuanTags, cleanUser) ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1">
               <ThapChamIcon className="w-2.5 h-2.5" />
               <span>Ninh Thuận</span>
@@ -754,7 +755,7 @@ export function PriceModal({
               store.toggleNinhThuanTag(pendingPrint.platform, cleanUser)
             }
             className={`px-2 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-              store[pendingPrint.platform].ninhThuanTags?.[cleanUser]
+              isCustomerNinhThuan(store[pendingPrint.platform].ninhThuanTags, cleanUser)
                 ? "bg-amber-600 border-amber-400 text-white font-bold shadow-sm ring-1 ring-amber-300"
                 : "bg-[#0e1621] border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
             }`}
@@ -2240,19 +2241,33 @@ export function ListModal({
                               <div className="min-w-0 flex-1">
                                 {/* Hàng 1: Tên khách ngang hàng với nút SP / Doanh thu */}
                                 <div className="flex items-center gap-1.5 flex-wrap min-h-[26px]">
-                                  <button
-                                    onClick={() =>
-                                      onOpenProfile?.(row.user, row.platform)
-                                    }
-                                    className="font-black text-white hover:text-blue-400 hover:underline cursor-pointer text-base sm:text-lg bg-transparent p-0 border-0 text-left break-words leading-tight"
-                                    title="Bấm để xem hồ sơ"
-                                  >
-                                    #{getShortId(row.user)} {row.user}
-                                  </button>
-                                  <CopyButton
-                                    text={`#${getShortId(row.user)} ${row.user}`}
-                                    className="text-xs shrink-0 text-gray-400"
-                                  />
+                                  {(() => {
+                                    const cleanRowUser = normalizeUser(row.user);
+                                    const rowNickname = store[row.platform].nicknames?.[cleanRowUser] || store[row.platform].nicknames?.[row.user];
+                                    const copyLabel = rowNickname ? `(${rowNickname}) #${getShortId(row.user)} ${row.user}` : `#${getShortId(row.user)} ${row.user}`;
+                                    return (
+                                      <>
+                                        <button
+                                          onClick={() =>
+                                            onOpenProfile?.(row.user, row.platform)
+                                          }
+                                          className="font-black text-white hover:text-blue-400 hover:underline cursor-pointer text-base sm:text-lg bg-transparent p-0 border-0 text-left break-words leading-tight inline-flex items-center gap-1 flex-wrap"
+                                          title={rowNickname ? `Khách: ${row.user} (Tên gợi nhớ: ${rowNickname})` : "Bấm để xem hồ sơ"}
+                                        >
+                                          {rowNickname && (
+                                            <span className="text-amber-300 font-black text-sm sm:text-base mr-0.5">
+                                              ({rowNickname})
+                                            </span>
+                                          )}
+                                          <span>#{getShortId(row.user)} {row.user}</span>
+                                        </button>
+                                        <CopyButton
+                                          text={copyLabel}
+                                          className="text-xs shrink-0 text-gray-400"
+                                        />
+                                      </>
+                                    );
+                                  })()}
                                   {isCustomerGheLay(
                                     store[row.platform].gheLayTags,
                                     row.user,
@@ -2262,7 +2277,7 @@ export function ListModal({
                                       <span>🛵</span>
                                       <span>Ghé lấy</span>
                                     </span>
-                                  ) : store[row.platform].ninhThuanTags?.[row.user] ? (
+                                  ) : isCustomerNinhThuan(store[row.platform].ninhThuanTags, row.user) ? (
                                     <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1">
                                       <ThapChamIcon className="w-2.5 h-2.5" />
                                       <span>Ninh Thuận</span>
@@ -3143,9 +3158,13 @@ export function ListModal({
                           const avatarUrl =
                             getCustomerAvatar(hRow.user, hRow.platform) ||
                             undefined;
+                          const cleanHUser = normalizeUser(hRow.user);
                           const nickname =
+                            store[hRow.platform].nicknames?.[cleanHUser] ||
                             store[hRow.platform].nicknames?.[hRow.user];
-                          const displayName = `#${getShortId(hRow.user)} ${hRow.user}`;
+                          const displayName = nickname
+                            ? `(${nickname}) #${getShortId(hRow.user)} ${hRow.user}`
+                            : `#${getShortId(hRow.user)} ${hRow.user}`;
                           const pastCount = hRow.pastItems.length;
                           const pastTotal = hRow.pastItems.reduce(
                             (s, it) => s + (it.price || 0),
@@ -3194,10 +3213,19 @@ export function ListModal({
                                             hRow.platform,
                                           )
                                         }
-                                        className="font-black text-white hover:text-blue-400 hover:underline cursor-pointer text-base sm:text-lg bg-transparent p-0 border-0 text-left break-words leading-tight"
-                                        title="Bấm để xem hồ sơ"
+                                        className="font-black text-white hover:text-blue-400 hover:underline cursor-pointer text-base sm:text-lg bg-transparent p-0 border-0 text-left break-words leading-tight inline-flex items-center gap-1 flex-wrap"
+                                        title={
+                                          nickname
+                                            ? `Khách: ${hRow.user} (Tên gợi nhớ: ${nickname})`
+                                            : "Bấm để xem hồ sơ"
+                                        }
                                       >
-                                        {displayName}
+                                        {nickname && (
+                                          <span className="text-amber-300 font-black text-sm sm:text-base mr-0.5">
+                                            ({nickname})
+                                          </span>
+                                        )}
+                                        <span>#{getShortId(hRow.user)} {hRow.user}</span>
                                       </button>
                                       <CopyButton
                                         text={displayName}
@@ -5383,7 +5411,7 @@ export function ProfileModal({
                     store[platform].tags,
                   ) ? (
                     <GheLayBadge className="text-[9px] shrink-0" />
-                  ) : store[platform].ninhThuanTags?.[cleanUser] ? (
+                  ) : isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser) ? (
                     <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-0.5">
                       <ThapChamIcon className="w-2.5 h-2.5" />
                       <span>NT</span>
@@ -5636,7 +5664,7 @@ export function ProfileModal({
                 type="button"
                 onClick={() => store.toggleNinhThuanTag(platform, cleanUser)}
                 className={`py-1 px-2.5 text-[11px] font-bold rounded-md border transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
-                  store[platform].ninhThuanTags?.[cleanUser]
+                  isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser)
                     ? "bg-amber-600 border-amber-400 text-white shadow-sm ring-1 ring-amber-300"
                     : "bg-[#1c242f] border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
                 }`}

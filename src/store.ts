@@ -1642,13 +1642,11 @@ const decodeKeys = (obj: any) => {
             const newTags = { ...state.tags, [user]: tag };
             const now = Date.now();
             
-            // Nếu chọn tag chính GHE_LAY, tự động tắt tag Ninh Thuận
-            if (tag === 'GHE_LAY' && state.ninhThuanTags?.[user]) {
-                const newNt = { ...(state.ninhThuanTags || {}) };
-                delete newNt[user];
-                set(s => ({ [platform]: { ...s[platform], ninhThuanTags: newNt } }));
-                localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNt));
-                pushData(platform, 'ninh_thuan_tags', newNt, now);
+            // Nếu chọn tag chính GHE_LAY, tự động bật gheLayTags và tắt Ninh Thuận
+            if (tag === 'GHE_LAY') {
+                get().setCustomerGheLayTag(platform, user, true);
+            } else if (prevTag === 'GHE_LAY') {
+                get().setCustomerGheLayTag(platform, user, false);
             }
 
             // Check if user is set to HOST, auto-detect latest price from their comments
@@ -1759,31 +1757,9 @@ const decodeKeys = (obj: any) => {
             const user = normalizeUser(rawUser);
             if (!user) return;
             const state = get()[platform];
-            const currentVal = Boolean(state.ninhThuanTags?.[user]);
+            const currentVal = isCustomerNinhThuan(state.ninhThuanTags, user);
             const nextVal = !currentVal;
-            const newNtTags = { ...(state.ninhThuanTags || {}) };
-            if (nextVal) {
-                newNtTags[user] = true;
-                // Ninh Thuận và Ghé lấy không chọn đồng thời -> Tự động tắt Ghé lấy nếu đang bật
-                get().setCustomerGheLayTag(platform, user, false);
-                if (state.tags?.[user] === 'GHE_LAY') {
-                    const newTags = { ...state.tags, [user]: 'NORMAL' as TagType };
-                    set(s => ({ [platform]: { ...s[platform], tags: newTags } }));
-                    localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
-                }
-            } else {
-                delete newNtTags[user];
-            }
-            const now = Date.now();
-            set(s => ({
-                [platform]: {
-                    ...s[platform],
-                    ninhThuanTags: newNtTags,
-                    lastNinhThuanTagsAt: now
-                }
-            }));
-            localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNtTags));
-            pushData(platform, 'ninh_thuan_tags', newNtTags, now);
+            get().setCustomerNinhThuanTag(platform, user, nextVal);
         },
 
         setCustomerNinhThuanTag: (platform, rawUser, enabled) => {
@@ -1791,63 +1767,86 @@ const decodeKeys = (obj: any) => {
             if (!user) return;
             const state = get()[platform];
             const newNtTags = { ...(state.ninhThuanTags || {}) };
+            const now = Date.now();
+            const keysToHandle = Array.from(new Set([user, rawUser, user.toLowerCase()])).filter(Boolean);
+
+            let newTags = state.tags ? { ...state.tags } : {};
+            let tagsChanged = false;
+            let newGheLayTags = state.gheLayTags ? { ...state.gheLayTags } : {};
+            let gheLayChanged = false;
+
             if (enabled) {
                 newNtTags[user] = true;
-                // Ninh Thuận và Ghé lấy không chọn đồng thời -> Tự động tắt Ghé lấy nếu đang bật
-                get().setCustomerGheLayTag(platform, user, false);
-                if (state.tags?.[user] === 'GHE_LAY') {
-                    const newTags = { ...state.tags, [user]: 'NORMAL' as TagType };
-                    set(s => ({ [platform]: { ...s[platform], tags: newTags } }));
-                    localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
+                // Xoá đánh dấu xoá cũ của Ninh Thuận nếu có
+                try {
+                    const deletedMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`) || '{}');
+                    keysToHandle.forEach(k => delete deletedMap[k]);
+                    localStorage.setItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`, JSON.stringify(deletedMap));
+                } catch {}
+
+                // Ninh Thuận và Ghé lấy không chọn đồng thời -> Tự động tắt Ghé lấy triệt để
+                keysToHandle.forEach(k => {
+                    if (newGheLayTags[k]) {
+                        delete newGheLayTags[k];
+                        gheLayChanged = true;
+                    }
+                    if (newTags[k] === 'GHE_LAY') {
+                        newTags[k] = 'NORMAL';
+                        tagsChanged = true;
+                    }
+                });
+
+                if (gheLayChanged || tagsChanged) {
+                    try {
+                        const delGlMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`) || '{}');
+                        keysToHandle.forEach(k => { delGlMap[k] = now; });
+                        localStorage.setItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`, JSON.stringify(delGlMap));
+                    } catch {}
+                    deleteCustomerKeyFromRemote(platform, 'ghe_lay_tags', user);
+                    if (rawUser && rawUser !== user) deleteCustomerKeyFromRemote(platform, 'ghe_lay_tags', rawUser);
                 }
             } else {
-                delete newNtTags[user];
+                // Tắt tag Ninh Thuận vĩnh viễn
+                keysToHandle.forEach(k => delete newNtTags[k]);
+                try {
+                    const deletedMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`) || '{}');
+                    keysToHandle.forEach(k => { deletedMap[k] = now; });
+                    localStorage.setItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`, JSON.stringify(deletedMap));
+                } catch {}
+                deleteCustomerKeyFromRemote(platform, 'ninh_thuan_tags', user);
+                if (rawUser && rawUser !== user) deleteCustomerKeyFromRemote(platform, 'ninh_thuan_tags', rawUser);
             }
-            const now = Date.now();
+
             set(s => ({
                 [platform]: {
                     ...s[platform],
                     ninhThuanTags: newNtTags,
-                    lastNinhThuanTagsAt: now
+                    lastNinhThuanTagsAt: now,
+                    ...(gheLayChanged ? { gheLayTags: newGheLayTags, lastGheLayTagsAt: now } : {}),
+                    ...(tagsChanged ? { tags: newTags, lastTagsAt: now } : {})
                 }
             }));
+
             localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNtTags));
-            pushData(platform, 'ninh_thuan_tags', newNtTags, now);
+            pushData(platform, 'ninh_thuan_tags', newNtTags, now, true);
+
+            if (gheLayChanged) {
+                localStorage.setItem(`slp_webapp_ghelay_${platform}`, JSON.stringify(newGheLayTags));
+                pushData(platform, 'ghe_lay_tags', newGheLayTags, now, true);
+            }
+            if (tagsChanged) {
+                localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
+                pushData(platform, 'tags', newTags, now, true);
+            }
         },
 
         toggleGheLayTag: (platform, rawUser) => {
             const user = normalizeUser(rawUser);
             if (!user) return;
             const state = get()[platform];
-            const currentVal = Boolean(state.gheLayTags?.[user] || state.tags?.[user] === 'GHE_LAY');
+            const currentVal = isCustomerGheLay(state.gheLayTags, user, state.tags);
             const nextVal = !currentVal;
-            const newGheLayTags = { ...(state.gheLayTags || {}) };
-            if (nextVal) {
-                newGheLayTags[user] = true;
-                // Ninh Thuận và Ghé lấy không chọn đồng thời -> Tự động tắt Ninh Thuận nếu đang bật
-                const newNt = { ...(state.ninhThuanTags || {}) };
-                delete newNt[user];
-                set(s => ({ [platform]: { ...s[platform], ninhThuanTags: newNt } }));
-                localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNt));
-                pushData(platform, 'ninh_thuan_tags', newNt, Date.now());
-            } else {
-                delete newGheLayTags[user];
-                if (state.tags?.[user] === 'GHE_LAY') {
-                    const newTags = { ...state.tags, [user]: 'NORMAL' as TagType };
-                    set(s => ({ [platform]: { ...s[platform], tags: newTags } }));
-                    localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
-                }
-            }
-            const now = Date.now();
-            set(s => ({
-                [platform]: {
-                    ...s[platform],
-                    gheLayTags: newGheLayTags,
-                    lastGheLayTagsAt: now
-                }
-            }));
-            localStorage.setItem(`slp_webapp_ghelay_${platform}`, JSON.stringify(newGheLayTags));
-            pushData(platform, 'ghe_lay_tags', newGheLayTags, now);
+            get().setCustomerGheLayTag(platform, user, nextVal);
         },
 
         setCustomerGheLayTag: (platform, rawUser, enabled) => {
@@ -1855,32 +1854,79 @@ const decodeKeys = (obj: any) => {
             if (!user) return;
             const state = get()[platform];
             const newGheLayTags = { ...(state.gheLayTags || {}) };
+            const now = Date.now();
+            const keysToHandle = Array.from(new Set([user, rawUser, user.toLowerCase()])).filter(Boolean);
+
+            let newTags = state.tags ? { ...state.tags } : {};
+            let tagsChanged = false;
+            let newNtTags = state.ninhThuanTags ? { ...state.ninhThuanTags } : {};
+            let ntChanged = false;
+
             if (enabled) {
                 newGheLayTags[user] = true;
-                // Ninh Thuận và Ghé lấy không chọn đồng thời -> Tự động tắt Ninh Thuận nếu đang bật
-                const newNt = { ...(state.ninhThuanTags || {}) };
-                delete newNt[user];
-                set(s => ({ [platform]: { ...s[platform], ninhThuanTags: newNt } }));
-                localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNt));
-                pushData(platform, 'ninh_thuan_tags', newNt, Date.now());
-            } else {
-                delete newGheLayTags[user];
-                if (state.tags?.[user] === 'GHE_LAY') {
-                    const newTags = { ...state.tags, [user]: 'NORMAL' as TagType };
-                    set(s => ({ [platform]: { ...s[platform], tags: newTags } }));
-                    localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
+                // Xoá đánh dấu xoá cũ của Ghé lấy nếu có
+                try {
+                    const deletedMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`) || '{}');
+                    keysToHandle.forEach(k => delete deletedMap[k]);
+                    localStorage.setItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`, JSON.stringify(deletedMap));
+                } catch {}
+
+                // Ghé lấy và Ninh Thuận không chọn đồng thời -> Tự động tắt Ninh Thuận triệt để
+                keysToHandle.forEach(k => {
+                    if (newNtTags[k]) {
+                        delete newNtTags[k];
+                        ntChanged = true;
+                    }
+                });
+
+                if (ntChanged) {
+                    try {
+                        const delNtMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`) || '{}');
+                        keysToHandle.forEach(k => { delNtMap[k] = now; });
+                        localStorage.setItem(`slp_webapp_deleted_ninh_thuan_tags_${platform}`, JSON.stringify(delNtMap));
+                    } catch {}
+                    deleteCustomerKeyFromRemote(platform, 'ninh_thuan_tags', user);
+                    if (rawUser && rawUser !== user) deleteCustomerKeyFromRemote(platform, 'ninh_thuan_tags', rawUser);
                 }
+            } else {
+                // Tắt tag Ghé lấy vĩnh viễn
+                keysToHandle.forEach(k => {
+                    delete newGheLayTags[k];
+                    if (newTags[k] === 'GHE_LAY') {
+                        newTags[k] = 'NORMAL';
+                        tagsChanged = true;
+                    }
+                });
+                try {
+                    const deletedMap = JSON.parse(localStorage.getItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`) || '{}');
+                    keysToHandle.forEach(k => { deletedMap[k] = now; });
+                    localStorage.setItem(`slp_webapp_deleted_ghe_lay_tags_${platform}`, JSON.stringify(deletedMap));
+                } catch {}
+                deleteCustomerKeyFromRemote(platform, 'ghe_lay_tags', user);
+                if (rawUser && rawUser !== user) deleteCustomerKeyFromRemote(platform, 'ghe_lay_tags', rawUser);
             }
-            const now = Date.now();
+
             set(s => ({
                 [platform]: {
                     ...s[platform],
                     gheLayTags: newGheLayTags,
-                    lastGheLayTagsAt: now
+                    lastGheLayTagsAt: now,
+                    ...(ntChanged ? { ninhThuanTags: newNtTags, lastNinhThuanTagsAt: now } : {}),
+                    ...(tagsChanged ? { tags: newTags, lastTagsAt: now } : {})
                 }
             }));
+
             localStorage.setItem(`slp_webapp_ghelay_${platform}`, JSON.stringify(newGheLayTags));
-            pushData(platform, 'ghe_lay_tags', newGheLayTags, now);
+            pushData(platform, 'ghe_lay_tags', newGheLayTags, now, true);
+
+            if (ntChanged) {
+                localStorage.setItem(`slp_webapp_ninhthuan_${platform}`, JSON.stringify(newNtTags));
+                pushData(platform, 'ninh_thuan_tags', newNtTags, now, true);
+            }
+            if (tagsChanged) {
+                localStorage.setItem(`slp_webapp_tags_${platform}`, JSON.stringify(newTags));
+                pushData(platform, 'tags', newTags, now, true);
+            }
         },
 
         recordOrder: (platform, rawUser, price, content, sourceCommentId) => {
@@ -3306,14 +3352,23 @@ const decodeKeys = (obj: any) => {
 export function isCustomerNinhThuan(ninhThuanTags?: Record<string, boolean>, user?: string): boolean {
     if (!ninhThuanTags || !user) return false;
     const clean = normalizeUser(user);
-    return Boolean(ninhThuanTags[clean] || ninhThuanTags[user]);
+    const cleanLower = clean.toLowerCase();
+    const userLower = user.toLowerCase();
+    return Boolean(
+        ninhThuanTags[clean] || 
+        ninhThuanTags[user] || 
+        ninhThuanTags[cleanLower] || 
+        ninhThuanTags[userLower]
+    );
 }
 
 export function isCustomerGheLay(gheLayTags?: Record<string, boolean>, user?: string, tags?: Record<string, TagType>): boolean {
     if (!user) return false;
     const clean = normalizeUser(user);
-    if (gheLayTags && (gheLayTags[clean] || gheLayTags[user])) return true;
-    if (tags && (tags[clean] === 'GHE_LAY' || tags[user] === 'GHE_LAY')) return true;
+    const cleanLower = clean.toLowerCase();
+    const userLower = user.toLowerCase();
+    if (gheLayTags && (gheLayTags[clean] || gheLayTags[user] || gheLayTags[cleanLower] || gheLayTags[userLower])) return true;
+    if (tags && (tags[clean] === 'GHE_LAY' || tags[user] === 'GHE_LAY' || tags[cleanLower] === 'GHE_LAY' || tags[userLower] === 'GHE_LAY')) return true;
     return false;
 }
 

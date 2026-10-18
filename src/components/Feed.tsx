@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, memo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useStore, CommentData, getFeedClearedAt, getGlobalFeedClearedAt, isCustomerGheLay } from '../store';
+import { useStore, CommentData, getFeedClearedAt, getGlobalFeedClearedAt, isCustomerGheLay, isCustomerNinhThuan } from '../store';
 import { PLATFORMS, extractPriceFromContent, Platform, getShortId, normalizeUser, getClosedPriceForComment, removeVietnameseAccents } from '../lib/core';
 import { openPancakeApp, extractPhoneFromText } from '../lib/pancakeDeepLink';
 import { getCustomerInsight, getOrderStatusLabel, getCustomerActivePastItems } from '../lib/pancakeSync';
@@ -218,8 +218,8 @@ const UserGroupRow = memo(function UserGroupRow({
     const isPinned = g.isPinned;
     const cust = pStore.customers && pStore.customers[userName];
     const userTag = (pStore.tags && pStore.tags[userName]) || 'NORMAL';
-    const nickname = pStore.nicknames?.[userName];
-    const displayName = userName;
+    const nickname = pStore.nicknames?.[userName] || pStore.nicknames?.[g.user];
+    const displayName = nickname ? `(${nickname}) ${userName}` : userName;
     const pancakeLink = pStore.pancakeLinks?.[userName];
     const latestC = g.latestComment;
     const latestCount = (pStore.printed && pStore.printed[latestC.id]) || 0;
@@ -270,14 +270,19 @@ const UserGroupRow = memo(function UserGroupRow({
                     <div className="flex items-center flex-wrap gap-y-1">
                         <div 
                             onClick={() => onOpenProfile(userName, g.platform)}
-                            className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[200px] xs:max-w-[280px] sm:max-w-[380px] mr-0.5"
+                            className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[220px] xs:max-w-[320px] sm:max-w-[420px] mr-0.5"
                             title={nickname ? `Khách: ${userName} (Tên gợi nhớ: ${nickname})` : `Khách: ${userName}`}
                         >
+                            {nickname && (
+                                <span className={`text-amber-300 font-black shrink-0 ${isPinned ? 'text-base sm:text-lg' : 'text-sm sm:text-base'}`}>
+                                    ({nickname})
+                                </span>
+                            )}
                             <b className={`text-gray-100 hover:underline truncate ${isPinned ? 'text-lg sm:text-xl' : 'text-base sm:text-[17px]'}`}>
                                 {userName}
                             </b>
                         </div>
-                        {pStore.ninhThuanTags?.[userName] && (
+                        {isCustomerNinhThuan(pStore.ninhThuanTags, userName) && (
                             <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1 mx-0.5" title="Khách Ninh Thuận">
                                 <ThapChamIcon className="w-2.5 h-2.5" />
                                 <span>Ninh Thuận</span>
@@ -553,8 +558,8 @@ const CommentRow = memo(function CommentRow({
     const isPinned = pStore.pinned && pStore.pinned[c.id] && (pStore.pinned[c.id].expiry > now || isHost);
     const cust = pStore.customers && pStore.customers[userName];
     const userTag = (pStore.tags && pStore.tags[userName]) || 'NORMAL';
-    const nickname = pStore.nicknames?.[userName];
-    const displayName = userName;
+    const nickname = pStore.nicknames?.[userName] || pStore.nicknames?.[c.user];
+    const displayName = nickname ? `(${nickname}) ${userName}` : userName;
     const contentStr = typeof c.content === 'object' ? JSON.stringify(c.content) : String(c.content || '');
     const detectedPhone = extractPhoneFromText(contentStr);
     const pancakeLink = pStore.pancakeLinks?.[userName];
@@ -597,14 +602,19 @@ const CommentRow = memo(function CommentRow({
                 <div className="flex items-center flex-wrap gap-y-1">
                     <div 
                         onClick={() => onOpenProfile(userName, c.platform)}
-                        className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[200px] xs:max-w-[280px] sm:max-w-[380px] mr-0.5"
+                        className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[220px] xs:max-w-[320px] sm:max-w-[420px] mr-0.5"
                         title={nickname ? `Khách: ${userName} (Tên gợi nhớ: ${nickname})` : `Khách: ${userName}`}
                     >
+                        {nickname && (
+                            <span className={`text-amber-300 font-black shrink-0 ${isPinned ? 'text-base sm:text-lg' : 'text-sm sm:text-base'}`}>
+                                ({nickname})
+                            </span>
+                        )}
                         <b className={`text-gray-100 hover:underline truncate ${isPinned ? 'text-lg sm:text-xl' : 'text-base sm:text-[17px]'}`}>
                             {userName}
                         </b>
                     </div>
-                    {pStore.ninhThuanTags?.[userName] && (
+                    {isCustomerNinhThuan(pStore.ninhThuanTags, userName) && (
                         <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1 mx-0.5" title="Khách Ninh Thuận">
                             <ThapChamIcon className="w-2.5 h-2.5" />
                             <span>Ninh Thuận</span>
@@ -1225,14 +1235,19 @@ export const Feed = memo(function Feed({
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 <div 
                                                     onClick={() => onOpenProfile(item.user, item.platform)} 
-                                                    className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[180px] xs:max-w-[240px]"
+                                                    className="inline-flex items-center gap-1 cursor-pointer truncate max-w-[200px] xs:max-w-[280px]"
                                                     title={nickname ? `Khách: ${item.user} (Tên gợi nhớ: ${nickname})` : `Khách: ${item.user}`}
                                                 >
+                                                    {nickname && (
+                                                        <span className="text-amber-300 font-black text-xs shrink-0 mr-0.5">
+                                                            ({nickname})
+                                                        </span>
+                                                    )}
                                                     <b className="text-gray-100 text-sm hover:underline truncate">
                                                         {item.user}
                                                     </b>
                                                 </div>
-                                                {pStore.ninhThuanTags?.[item.user] && (
+                                                {isCustomerNinhThuan(pStore.ninhThuanTags, item.user) && (
                                                     <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1" title="Khách Ninh Thuận">
                                                         <ThapChamIcon className="w-2.5 h-2.5" />
                                                         <span>Ninh Thuận</span>

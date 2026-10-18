@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Platform, PLATFORMS, normalizeUser } from '../lib/core';
-import { useStore, getCustomerAvatar } from '../store';
+import { useStore, getCustomerAvatar, isCustomerNinhThuan, isCustomerGheLay } from '../store';
 import { getAvatarFromMemory, getAvatarFromCache, cacheRemoteAvatar } from '../lib/avatarCache';
 
 export function ThapChamIcon({ className = "w-3 h-3" }: { className?: string }) {
@@ -122,14 +122,14 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = memo(({
     // Nhận diện khách Ghé Lấy để hiển thị biểu tượng Xe Máy 🛵 trên avatar
     const storeGl = useStore(state => {
         if (!platform || !cleanUser) return false;
-        return Boolean(state[platform]?.gheLayTags?.[cleanUser] || state[platform]?.tags?.[cleanUser] === 'GHE_LAY');
+        return isCustomerGheLay(state[platform]?.gheLayTags, cleanUser, state[platform]?.tags);
     });
     const effectiveIsGl = isGheLay !== undefined ? isGheLay : storeGl;
 
     // Nhận diện khách Ninh Thuận để hiển thị biểu tượng Tháp Chàm trên avatar (Không chọn đồng thời với Ghé lấy)
     const storeNt = useStore(state => {
         if (!platform || !cleanUser) return false;
-        return Boolean(state[platform]?.ninhThuanTags?.[cleanUser]);
+        return isCustomerNinhThuan(state[platform]?.ninhThuanTags, cleanUser);
     });
     const rawIsNt = isNinhThuan !== undefined ? isNinhThuan : storeNt;
     const effectiveIsNt = rawIsNt && !effectiveIsGl;

@@ -175,13 +175,13 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
   const [recipientAddress, setRecipientAddress] = useState('');
   const [shippingFee, setShippingFee] = useState<number>(() => {
     if (isGheLayCustomer) return 0;
-    if (store[platform].ninhThuanTags?.[cleanUser]) return 15000;
+    if (isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser)) return 15000;
     return 20000;
   });
   const [prepaidAmount, setPrepaidAmount] = useState<number>(0);
   const [isLookingUpPhone, setIsLookingUpPhone] = useState(false);
 
-  const isNinhThuanCustomer = Boolean(store[platform].ninhThuanTags?.[cleanUser]) && !isGheLayCustomer;
+  const isNinhThuanCustomer = isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser) && !isGheLayCustomer;
 
   // Tự động nhận diện phí vận chuyển:
   // - Nếu khách có tag "Ghé lấy" (GHE_LAY): 0₫ (Miễn hoàn toàn phí ship)
@@ -470,7 +470,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
       setOrderItems(syncPhuShipItems(initialItems, isGheLayCustomer));
       if (isGheLayCustomer) {
         setShippingFee(0);
-      } else if (store[platform].ninhThuanTags?.[cleanUser]) {
+      } else if (isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser)) {
         setShippingFee(15000);
       } else {
         setShippingFee(20000);
