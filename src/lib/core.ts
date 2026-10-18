@@ -7,7 +7,13 @@ export const firebaseApp = initializeApp({
 });
 export const firebaseDb = getDatabase(firebaseApp);
 export const SHOP_NAME = "Hiền Phạm | 0965.286.096";
-export const APP_VERSION = "v2.6.0";
+export const APP_VERSION = "v2.8.0";
+
+export function showAppToast(msg: string) {
+    try {
+        window.dispatchEvent(new CustomEvent('app_toast_notification', { detail: msg }));
+    } catch {}
+}
 
 export type Platform = 'tiktok' | 'facebook' | 'shopee';
 

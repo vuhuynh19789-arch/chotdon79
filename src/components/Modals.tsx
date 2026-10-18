@@ -3708,12 +3708,12 @@ export function ListModal({
 
             if (isMiniBarMinimized) {
               return (
-                <div className="fixed bottom-[62px] right-3 z-[90] animate-bounce">
+                <div className="fixed bottom-2 right-3 z-[90] animate-bounce">
                   <button
                     type="button"
                     onClick={() => setIsMiniBarMinimized(false)}
                     className="py-2.5 px-3.5 rounded-full bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 border-2 border-orange-300 text-white font-black text-xs flex items-center gap-1.5 shadow-[0_8px_25px_rgba(0,0,0,0.8)] active:scale-90 transition-all cursor-pointer"
-                    title="Bấm để mở lại thanh chọn đơn"
+                    title="Bấm để hiện lại thanh chọn đơn"
                   >
                     <span>🛍️</span>
                     <span>{globalSelectedQty} cái ({globalSelectedTotalK}k)</span>
@@ -3724,7 +3724,10 @@ export function ListModal({
             }
 
             return (
-              <div className="fixed bottom-[58px] left-2 right-2 sm:left-4 sm:right-4 z-[90] bg-[#111927]/98 border-2 border-orange-500/90 p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 shadow-[0_12px_35px_rgba(0,0,0,0.9)] backdrop-blur-md animate-slideUp">
+              <div 
+                className="fixed bottom-1 sm:bottom-2 left-2 right-2 sm:left-4 sm:right-4 z-[90] bg-[#111927]/98 border-2 border-orange-500/90 p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 shadow-[0_12px_35px_rgba(0,0,0,0.9)] backdrop-blur-md animate-slideUp"
+                style={{ touchAction: 'pan-x pan-y' }}
+              >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xl">🛍️</span>
                   <div className="min-w-0">
@@ -3767,7 +3770,7 @@ export function ListModal({
                     type="button"
                     onClick={() => setIsMiniBarMinimized(true)}
                     className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-white/10 active:scale-90"
-                    title="Thu gọn thanh chọn"
+                    title="Ẩn thanh chọn (bấm X để thu gọn)"
                   >
                     ✕
                   </button>
