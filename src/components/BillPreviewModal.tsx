@@ -53,166 +53,186 @@ export const BillPreviewModal: React.FC<BillPreviewModalProps> = ({
 
   const displayName = nickname ? `(${nickname}) #${getShortId(cleanUser)} ${cleanUser}` : `#${getShortId(cleanUser)} ${cleanUser}`;
 
-  // Vẽ Canvas chuẩn để xuất ảnh tải về hoặc sao chép ảnh
+  // Vẽ Canvas chuẩn độ phân giải cao (baseW = 520, 2x scale = 1040px) giúp chữ TO RÕ NÉT khi xem trên điện thoại Zalo/Messenger
   const renderBillToCanvas = (): HTMLCanvasElement => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return canvas;
 
-    const w = 650;
-    canvas.width = w;
+    const baseW = 520; // Rộng hẹp chuẩn bill nhiệt 80mm giúp chữ cực to khi Zalo scale vừa màn hình
+    const scale = 2; // Scaled for Retina & High-DPI screens (1040px width)
 
-    // Ước tính chiều cao
-    const headerH = 140;
-    const userH = 90;
-    const itemsH = items.length * 55 + 20;
-    const summaryH = 190;
-    const footerH = 80;
-    canvas.height = headerH + userH + itemsH + summaryH + footerH;
+    // Tính toán lại danh sách sản phẩm gồm phụ ship 5k nếu là đơn 1 cái
+    const displayItems = [...items];
+    const mainItemsOnly = items.filter(it => !isPhuShipItem(it.content));
+    const mainQtyOnly = mainItemsOnly.reduce((sum, it) => sum + (it.quantity || 1), 0);
+    const isSingleItemOrder = mainQtyOnly === 1 && shippingFee > 0;
+    if (isSingleItemOrder && !displayItems.some(it => isPhuShipItem(it.content))) {
+      displayItems.push({
+        id: "phu_ship_5k",
+        content: "Phụ ship 5k",
+        price: 5,
+        unitPrice: 5,
+        quantity: 1
+      });
+    }
+
+    const calcItemsK = displayItems.reduce((sum, it) => sum + (it.price || (it.unitPrice || 0) * (it.quantity || 1)), 0);
+    const calcItemsVnd = calcItemsK * 1000;
+    const calcCodVnd = Math.max(0, calcItemsVnd + shippingFee - prepaid);
+
+    // Tính toán chiều cao chính xác (exact height trimming)
+    let totalH = 90 + 90 + 55 + (displayItems.length * 52) + 35 + 38 + 38 + (prepaid > 0 ? 38 : 0) + 105 + 55;
+    canvas.width = baseW * scale;
+    canvas.height = totalH * scale;
+
+    ctx.scale(scale, scale);
 
     // Nền giấy trắng
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, canvas.height);
+    ctx.fillRect(0, 0, baseW, totalH);
 
     ctx.fillStyle = '#111827';
     ctx.textAlign = 'center';
 
-    // Header Shop
-    ctx.font = '900 32px Arial, sans-serif';
-    ctx.fillText('HÓA ĐƠN BÁN HÀNG', w / 2, 45);
+    // 1. Header Shop
+    let y = 42;
+    ctx.font = '900 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('HÓA ĐƠN BÁN HÀNG', baseW / 2, y);
 
-    ctx.font = 'bold 16px Arial, sans-serif';
+    y += 28;
+    ctx.font = 'bold 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.fillStyle = '#4b5563';
-    ctx.fillText(`${PLATFORMS[platform].label} • Ngày: ${currentDate} • Giờ: ${currentTime}`, w / 2, 75);
+    ctx.fillText(`${PLATFORMS[platform].label} • Ngày: ${currentDate} • Giờ: ${currentTime}`, baseW / 2, y);
 
+    y += 20;
     // Đường kẻ ngang nét đứt
-    ctx.strokeStyle = '#d1d5db';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#9ca3af';
+    ctx.lineWidth = 2;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
-    ctx.moveTo(30, 95);
-    ctx.lineTo(w - 30, 95);
+    ctx.moveTo(20, y);
+    ctx.lineTo(baseW - 20, y);
     ctx.stroke();
 
-    // Thông tin khách
+    // 2. Thông tin khách hàng
+    y += 38;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#111827';
-    ctx.font = '900 24px Arial, sans-serif';
-    ctx.fillText(`Khách: ${displayName}`, 30, 130);
+    ctx.font = '900 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`Khách: ${displayName}`, 20, y);
 
-    ctx.font = 'bold 15px Arial, sans-serif';
-    ctx.fillStyle = '#6b7280';
-    let badgeText = isGl ? '🛵 GHÉ LẤY' : isNt ? '⚡ NINH THUẬN' : '📦 TOÀN QUỐC';
-    ctx.fillText(`Hình thức: ${badgeText} • SL: ${totalQty} món`, 30, 160);
-
-    // Header bảng
-    let y = 195;
-    ctx.beginPath();
-    ctx.moveTo(30, y);
-    ctx.lineTo(w - 30, y);
-    ctx.stroke();
-    y += 25;
-
-    ctx.font = 'bold 14px Arial, sans-serif';
+    y += 32;
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.fillStyle = '#4b5563';
-    ctx.fillText('STT  TÊN MÓN', 30, y);
-    ctx.textAlign = 'right';
-    ctx.fillText('SL x GIÁ     THÀNH TIỀN', w - 30, y);
-    y += 15;
+    let badgeText = isGl ? '🛵 GHÉ LẤY' : isNt ? '⚡ NINH THUẬN' : '📦 TOÀN QUỐC';
+    ctx.fillText(`Hình thức: ${badgeText} • SL: ${mainQtyOnly} món`, 20, y);
 
+    y += 20;
     ctx.beginPath();
-    ctx.moveTo(30, y);
-    ctx.lineTo(w - 30, y);
+    ctx.moveTo(20, y);
+    ctx.lineTo(baseW - 20, y);
     ctx.stroke();
-    y += 25;
 
-    // Danh sách món
+    // 3. Header bảng
+    y += 32;
+    ctx.font = 'bold 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#374151';
+    ctx.fillText('STT TÊN MÓN', 20, y);
+    ctx.textAlign = 'right';
+    ctx.fillText('SL x GIÁ   THÀNH TIỀN', baseW - 20, y);
+
+    y += 16;
+    ctx.beginPath();
+    ctx.moveTo(20, y);
+    ctx.lineTo(baseW - 20, y);
+    ctx.stroke();
+
+    // 4. Danh sách món (Chữ to 22px)
     ctx.fillStyle = '#111827';
-    items.forEach((it, idx) => {
+    displayItems.forEach((it, idx) => {
+      y += 48;
       const uPrice = it.unitPrice || (it.quantity ? Math.round(it.price / it.quantity) : it.price);
       const q = it.quantity || 1;
       const tVnd = (it.price || uPrice * q) * 1000;
       const cleanName = (it.content && !it.content.includes('(Không ghi chú)')) ? it.content : `Sản phẩm ${uPrice}k`;
 
       ctx.textAlign = 'left';
-      ctx.font = 'bold 15px Arial, sans-serif';
-      const truncatedName = cleanName.length > 28 ? cleanName.slice(0, 26) + '...' : cleanName;
-      ctx.fillText(`${idx + 1}. ${truncatedName}`, 30, y);
+      ctx.font = '900 21px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const truncatedName = cleanName.length > 20 ? cleanName.slice(0, 18) + '...' : cleanName;
+      ctx.fillText(`${idx + 1}. ${truncatedName}`, 20, y);
 
       ctx.textAlign = 'right';
-      ctx.font = '600 14px monospace';
-      ctx.fillText(`${q}x${uPrice}k    ${tVnd.toLocaleString('vi-VN')}đ`, w - 30, y);
-
-      y += 45;
+      ctx.font = '700 20px "Courier New", monospace';
+      ctx.fillText(`${q}x${uPrice}k   ${tVnd.toLocaleString('vi-VN')}đ`, baseW - 20, y);
     });
 
-    // Đường kẻ phân cách tổng kết
+    y += 26;
     ctx.beginPath();
-    ctx.moveTo(30, y);
-    ctx.lineTo(w - 30, y);
+    ctx.moveTo(20, y);
+    ctx.lineTo(baseW - 20, y);
     ctx.stroke();
-    y += 30;
 
-    // Tiền hàng
+    // 5. Bảng tổng hợp tiền (Chữ to 20px)
+    y += 34;
     ctx.textAlign = 'left';
-    ctx.font = '16px Arial, sans-serif';
+    ctx.font = 'bold 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.fillStyle = '#374151';
-    ctx.fillText(`Tổng tiền hàng (${totalQty} món):`, 30, y);
+    ctx.fillText(`Tổng tiền hàng (${mainQtyOnly} món):`, 20, y);
     ctx.textAlign = 'right';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText(`${totalItemsVnd.toLocaleString('vi-VN')} đ`, w - 30, y);
-    y += 32;
+    ctx.font = 'bold 21px "Courier New", monospace';
+    ctx.fillStyle = '#111827';
+    ctx.fillText(`${calcItemsVnd.toLocaleString('vi-VN')} đ`, baseW - 20, y);
 
-    // Tiền ship
+    y += 34;
     ctx.textAlign = 'left';
-    ctx.font = '16px Arial, sans-serif';
-    ctx.fillText('Phí giao hàng (Ship):', 30, y);
+    ctx.font = 'bold 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#374151';
+    ctx.fillText('Phí giao hàng (Ship):', 20, y);
     ctx.textAlign = 'right';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText(shippingFee === 0 ? '0 đ (Miễn phí)' : `+${shippingFee.toLocaleString('vi-VN')} đ`, w - 30, y);
-    y += 32;
+    ctx.font = 'bold 21px "Courier New", monospace';
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillText(shippingFee === 0 ? '0 đ (Miễn phí)' : `+${shippingFee.toLocaleString('vi-VN')} đ`, baseW - 20, y);
 
-    // Tiền cọc
     if (prepaid > 0) {
+      y += 34;
       ctx.textAlign = 'left';
-      ctx.font = '16px Arial, sans-serif';
-      ctx.fillText('Đã đặt cọc:', 30, y);
-      ctx.textAlign = 'right';
-      ctx.font = 'bold 17px monospace';
-      ctx.fillStyle = '#b45309';
-      ctx.fillText(`-${prepaid.toLocaleString('vi-VN')} đ`, w - 30, y);
+      ctx.font = 'bold 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = '#374151';
-      y += 32;
+      ctx.fillText('Đã đặt cọc:', 20, y);
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 21px "Courier New", monospace';
+      ctx.fillStyle = '#b45309';
+      ctx.fillText(`-${prepaid.toLocaleString('vi-VN')} đ`, baseW - 20, y);
     }
 
-    // Đường nét liền đôi
-    y += 5;
+    // 6. Khung THU HỘ (COD) nổi bật (Chữ KHỦNG 40px)
+    y += 28;
     ctx.setLineDash([]);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#111827';
+    ctx.fillStyle = '#f0fdf4';
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(30, y);
-    ctx.lineTo(w - 30, y);
+    ctx.roundRect(20, y, baseW - 40, 78, 16);
+    ctx.fill();
     ctx.stroke();
-    y += 38;
 
-    // THU HỘ COD
     ctx.textAlign = 'left';
-    ctx.font = '900 24px Arial, sans-serif';
-    ctx.fillStyle = '#111827';
-    ctx.fillText('THU HỘ (COD):', 30, y);
+    ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#065f46';
+    ctx.fillText('THU HỘ (COD):', 36, y + 48);
 
     ctx.textAlign = 'right';
-    ctx.font = '900 32px monospace';
+    ctx.font = '900 38px "Courier New", monospace';
     ctx.fillStyle = '#047857';
-    ctx.fillText(`${finalCodVnd.toLocaleString('vi-VN')} đ`, w - 30, y);
+    ctx.fillText(`${calcCodVnd.toLocaleString('vi-VN')} đ`, baseW - 36, y + 50);
 
-    // Lời cảm ơn chân trang
-    y += 45;
+    y += 112;
+    // 7. Lời cảm ơn
     ctx.textAlign = 'center';
-    ctx.font = 'italic 15px Arial, sans-serif';
+    ctx.font = 'bold italic 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.fillStyle = '#6b7280';
-    ctx.fillText('Cảm ơn quý khách đã mua sắm! ❤️', w / 2, y);
+    ctx.fillText('Cảm ơn quý khách đã mua sắm! ❤️', baseW / 2, y);
 
     return canvas;
   };

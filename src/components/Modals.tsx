@@ -1288,6 +1288,7 @@ export function ListModal({
   const [expandedPastMap, setExpandedPastMap] = useState<
     Record<string, boolean>
   >({});
+  const [isMiniBarMinimized, setIsMiniBarMinimized] = useState(false);
   const [showHoldingOnlySection, setShowHoldingOnlySection] = useState(false);
   const [hasCheckedHolding, setHasCheckedHolding] = useState(false);
   const [isCheckingHolding, setIsCheckingHolding] = useState(false);
@@ -3648,8 +3649,127 @@ export function ListModal({
               </div>
             )}
           </div>
+          {/* 🌟 THANH MINI TỔNG SỐ CÁI VÀ TỔNG TIỀN ĐÃ CHỌN Ở GIỎ HÀNG */}
+          {(() => {
+            let globalSelectedQty = 0;
+            let globalSelectedTotalK = 0;
+            let activeUser = "";
+            let activePlatform: Platform = "tiktok";
+
+            Object.entries(selectedCurrentMap).forEach(([key, set]) => {
+              if (!set || set.size === 0) return;
+              const parts = key.split("_");
+              const plat = parts[0] as Platform;
+              const u = parts.slice(1).join("_");
+              if (!activeUser) {
+                activeUser = u;
+                activePlatform = plat;
+              }
+              const cust = store[plat]?.customers?.[u];
+              const items = cust?.items || [];
+              set.forEach((idx) => {
+                const it = items[idx];
+                if (it) {
+                  const q = it.quantity || 1;
+                  globalSelectedQty += q;
+                  globalSelectedTotalK += it.price || 0;
+                }
+              });
+            });
+
+            Object.entries(selectedPastMap).forEach(([key, set]) => {
+              if (!set || set.size === 0) return;
+              const parts = key.split("_");
+              const plat = parts[0] as Platform;
+              const u = parts.slice(1).join("_");
+              if (!activeUser) {
+                activeUser = u;
+                activePlatform = plat;
+              }
+              const cust = store[plat]?.customers?.[u];
+              const items = cust?.pastItems || [];
+              set.forEach((idx) => {
+                const it = items[idx];
+                if (it) {
+                  const q = it.quantity || 1;
+                  globalSelectedQty += q;
+                  globalSelectedTotalK += it.price || 0;
+                }
+              });
+            });
+
+            if (globalSelectedQty === 0) return null;
+
+            if (isMiniBarMinimized) {
+              return (
+                <div className="fixed bottom-[62px] right-3 z-[90] animate-bounce">
+                  <button
+                    type="button"
+                    onClick={() => setIsMiniBarMinimized(false)}
+                    className="py-2.5 px-3.5 rounded-full bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 border-2 border-orange-300 text-white font-black text-xs flex items-center gap-1.5 shadow-[0_8px_25px_rgba(0,0,0,0.8)] active:scale-90 transition-all cursor-pointer"
+                    title="Bấm để mở lại thanh chọn đơn"
+                  >
+                    <span>🛍️</span>
+                    <span>{globalSelectedQty} cái ({globalSelectedTotalK}k)</span>
+                    <ChevronUp size={14} className="stroke-[3]" />
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div className="fixed bottom-[58px] left-2 right-2 sm:left-4 sm:right-4 z-[90] bg-[#111927]/98 border-2 border-orange-500/90 p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 shadow-[0_12px_35px_rgba(0,0,0,0.9)] backdrop-blur-md animate-slideUp">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl">🛍️</span>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 flex-wrap">
+                      <span className="text-amber-300 font-extrabold uppercase">ĐÃ CHỌN: {globalSelectedQty} CÁI</span>
+                      <span>•</span>
+                      <span className="text-emerald-400 font-mono font-black">{globalSelectedTotalK.toLocaleString("vi-VN")}k ({(globalSelectedTotalK * 1000).toLocaleString("vi-VN")}đ)</span>
+                    </div>
+                    <div className="text-[10.5px] text-gray-400 truncate mt-0.5 flex items-center gap-2">
+                      <span>Khách: @{activeUser}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCurrentMap({});
+                          setSelectedPastMap({});
+                        }}
+                        className="text-red-400 hover:text-red-300 underline font-semibold text-[10px]"
+                      >
+                        (Bỏ chọn)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeUser && activePlatform) {
+                        handlePushOrder(activeUser, activePlatform);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 hover:from-orange-500 hover:to-amber-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer border border-orange-400/40"
+                  >
+                    <span>🥞</span>
+                    <span>ĐẨY ĐƠN ({globalSelectedQty})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsMiniBarMinimized(true)}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-white/10 active:scale-90"
+                    title="Thu gọn thanh chọn"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
-      </div>
       {editingPriceQty && (
         <QuickPriceQtyModal
           target={editingPriceQty}
@@ -3869,7 +3989,8 @@ export function ListModal({
         </div>
       )}
     </div>
-  );
+  </div>
+);
 }
 
 export function LiveEfficiencyModal({
@@ -4445,162 +4566,7 @@ export function LiveEfficiencyModal({
             </div>
           </div>
 
-          {/* 🚀 BẢNG THỐNG KÊ HIỆU QUẢ ĐẨY ĐƠN PANCAKE POS */}
-          <div className="bg-gradient-to-br from-[#182333] via-[#1c293d] to-[#121c29] p-4 rounded-2xl border-2 border-orange-500/40 shadow-xl shadow-orange-950/20 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📊</span>
-                <div>
-                  <h3 className="font-black text-white text-sm sm:text-base tracking-wide flex items-center gap-2">
-                    HIỆU QUẢ ĐẨY ĐƠN PANCAKE POS
-                    <span className="text-[10px] bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Live Stats
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    Thống kê chi tiết đơn chốt đã đẩy vào hệ thống Pancake POS
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-mono font-bold text-orange-400 bg-orange-950/80 px-2.5 py-1 rounded-lg border border-orange-500/30">
-                {pushedOrdersCount} đơn
-              </span>
-            </div>
 
-            {/* 3 Thẻ số liệu chính: SL Đơn Đẩy | Doanh Thu Đẩy | Số Cái Đẩy Out */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {/* Thẻ 1: SL Đơn Đẩy */}
-              <div className="bg-[#0b1320] p-2.5 sm:p-3 rounded-xl border border-orange-500/30 text-center relative overflow-hidden shadow-inner">
-                <div className="text-[10px] sm:text-xs font-bold text-orange-400 uppercase tracking-tight">
-                  Số Đơn Đã Đẩy
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-white mt-1 font-mono">
-                  {pushedOrdersCount}{" "}
-                  <span className="text-xs font-normal text-gray-400 font-sans">đơn</span>
-                </div>
-                <div className="text-[9.5px] text-gray-400 mt-0.5">
-                  Đã tạo trên POS
-                </div>
-              </div>
-
-              {/* Thẻ 2: Doanh Thu Đẩy Đơn */}
-              <div className="bg-[#0b1320] p-2.5 sm:p-3 rounded-xl border border-emerald-500/30 text-center relative overflow-hidden shadow-inner">
-                <div className="text-[10px] sm:text-xs font-bold text-emerald-400 uppercase tracking-tight">
-                  Doanh Thu Đẩy
-                </div>
-                <div className="text-lg sm:text-2xl font-black text-emerald-400 mt-1 font-mono">
-                  {pushedRevenue.toLocaleString("vi-VN")}
-                  <span className="text-xs font-bold text-emerald-400 font-sans ml-0.5">đ</span>
-                </div>
-                <div className="text-[9.5px] text-gray-400 mt-0.5">
-                  {pushedOrdersCount > 0 ? `${Math.round(pushedRevenue / pushedOrdersCount).toLocaleString("vi-VN")}đ/đơn` : '0đ/đơn'}
-                </div>
-              </div>
-
-              {/* Thẻ 3: Số Cái / Sản Phẩm Đã Đẩy */}
-              <div className="bg-[#0b1320] p-2.5 sm:p-3 rounded-xl border border-cyan-500/30 text-center relative overflow-hidden shadow-inner">
-                <div className="text-[10px] sm:text-xs font-bold text-cyan-400 uppercase tracking-tight">
-                  Số Cái / SP Đẩy
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-cyan-300 mt-1 font-mono">
-                  {pushedItemsCount}{" "}
-                  <span className="text-xs font-normal text-gray-400 font-sans">cái</span>
-                </div>
-                <div className="text-[9.5px] text-gray-400 mt-0.5">
-                  Sản phẩm xuất đi
-                </div>
-              </div>
-            </div>
-
-            {/* Danh sách các đơn đã đẩy gần đây */}
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
-                  <span>📜 Lịch sử đẩy đơn chi tiết</span>
-                  <span className="text-[10px] text-gray-500 font-normal">({pushedList.length} lượt)</span>
-                </span>
-              </div>
-
-              {pushedList.length === 0 ? (
-                <div className="p-4 bg-[#0b1320] rounded-xl border border-white/5 text-center text-xs text-gray-400 italic">
-                  Chưa có đơn hàng nào được đẩy trong khoảng thời gian đã chọn.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 hide-scrollbar">
-                  {pushedList.slice(0, 30).map(({ user, platform, nickname, rec }, idx) => {
-                    const isRestored = rec.status === "restored";
-                    const recItemsQty = rec.totalQuantity || (rec.items || []).reduce((s, i) => s + (i.quantity || 1), 0) || 0;
-                    const recTotalVnd = rec.totalPrice || 0;
-                    const timeText = rec.timestamp ? new Date(rec.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
-                    const dateText = rec.dateStr || (rec.timestamp ? new Date(rec.timestamp).toLocaleDateString("vi-VN") : "");
-
-                    return (
-                      <div
-                        key={`pushed-rec-${user}-${rec.id}-${idx}`}
-                        className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 text-xs ${
-                          isRestored
-                            ? "bg-amber-950/20 border-amber-500/20 text-gray-400"
-                            : "bg-[#0b1320] border-white/10 hover:border-orange-500/40 text-gray-200"
-                        }`}
-                      >
-                        {/* Trái: Khách + Sàn + Đơn số */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-white truncate">
-                              @{user}
-                            </span>
-                            {nickname && (
-                              <span className="text-[10.5px] text-amber-300 font-semibold truncate">
-                                ({nickname})
-                              </span>
-                            )}
-                            <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-bold shrink-0 ${PLATFORMS[platform].bgClass} ${PLATFORMS[platform].colorClass}`}>
-                              {PLATFORMS[platform].label}
-                            </span>
-                            {rec.orderNumber && (
-                              <span className="text-[10px] bg-blue-950 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
-                                #{rec.orderNumber}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-gray-400 mt-1 flex items-center gap-2 flex-wrap font-mono">
-                            <span>📦 <strong className="text-white">{recItemsQty} cái</strong></span>
-                            <span>•</span>
-                            <span className="text-emerald-400 font-bold">{recTotalVnd.toLocaleString("vi-VN")}đ</span>
-                            {rec.shippingFee ? <span className="text-gray-400 text-[10px]">Ship: {rec.shippingFee.toLocaleString("vi-VN")}đ</span> : null}
-                            {rec.prepaid ? <span className="text-amber-300 text-[10px]">Cọc: {rec.prepaid.toLocaleString("vi-VN")}đ</span> : null}
-                          </div>
-                        </div>
-
-                        {/* Phải: Thời gian & Trạng thái & Action */}
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                            isRestored
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                              : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          }`}>
-                            {isRestored ? "↩️ Đã khôi phục" : "🚀 Đã đẩy"}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-mono">
-                            {timeText} {dateText}
-                          </span>
-                          {onOpenProfile && (
-                            <button
-                              type="button"
-                              onClick={() => onOpenProfile(user, platform)}
-                              className="text-[10px] text-blue-400 hover:text-white underline cursor-pointer mt-0.5"
-                            >
-                              Xem hồ sơ ➔
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Customer Segments */}
           <div className="bg-[#1c242f] p-4 rounded-2xl border border-white/10 shadow-sm space-y-3">
