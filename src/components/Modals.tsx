@@ -8164,12 +8164,15 @@ export function ProfileModal({
                 </div>
               )}
               {directPushSuccess && (
-                <div className="px-3.5 py-1.5 bg-emerald-950/90 border-b border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-2">
-                  <span className="font-bold truncate">{directPushSuccess}</span>
+                <div className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-800 border-y-2 border-emerald-400 text-white text-xs sm:text-sm font-black flex items-center justify-between gap-2 shadow-lg animate-fadeIn">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base">🎉</span>
+                    <span className="truncate">{directPushSuccess}</span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setDirectPushSuccess(null)}
-                    className="text-emerald-400 hover:text-white text-xs font-bold px-1.5 py-0.5"
+                    className="text-white hover:text-gray-200 text-xs font-black px-2 py-1 bg-black/20 rounded-lg cursor-pointer"
                   >
                     ✕
                   </button>
