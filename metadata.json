@@ -1,0 +1,8 @@
+{
+  "name": "Chốt Đơn Live",
+  "description": "Ứng dụng chốt đơn livestream đa nền tảng và quản lý đơn hàng TikTok, Facebook, Shopee",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

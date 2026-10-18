@@ -1,0 +1,161 @@
+792:export function CustomersModal({
+793-    onClose,
+794-    onOpenProfile,
+795-    onOpenNewOrder
+796-}: {
+797-    onClose: () => void;
+798-    onOpenProfile?: (u: string, p: Platform) => void;
+799-    onOpenNewOrder?: (u: string, p: Platform) => void;
+800-}) {
+801-    const store = useStore();
+802-    const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
+803-    const [searchTerm, setSearchTerm] = useState('');
+804-
+805-    let customerList: { user: string; platform: Platform; data: CustomerData; tag: string }[] = [];
+806-
+807-    (['tiktok', 'facebook', 'shopee'] as Platform[]).forEach(p => {
+808-        if (selectedPlatform !== 'all' && selectedPlatform !== p) return;
+809-        const custs = store[p].customers;
+810-        Object.keys(custs).forEach(user => {
+811-            const data = custs[user];
+812-            const tag = store[p].tags[user] || 'NORMAL';
+813-            customerList.push({ user, platform: p, data, tag });
+814-        });
+815-    });
+816-
+817-    // Filter by search term
+818-    const keyword = searchTerm.trim().toLowerCase();
+819-    if (keyword) {
+820-        customerList = customerList.filter(c => {
+821-            const nick = store[c.platform].nicknames?.[c.user] || '';
+822-            return c.user.toLowerCase().includes(keyword) || nick.toLowerCase().includes(keyword);
+823-        });
+824-    }
+825-
+826-    // Sort by recent activity or total spend
+827-    customerList.sort((a, b) => (b.data.lastTime || 0) - (a.data.lastTime || 0));
+828-
+829-    return (
+830-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+831-            <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+832-                {/* Header */}
+833-                <div className="flex justify-between items-center p-4 border-b border-gray-200 shrink-0 bg-white">
+834-                    <div className="flex items-center gap-2">
+835-                        <span className="text-xl">👥</span>
+836-                        <h3 className="text-lg font-bold text-gray-800 m-0">
+837-                            DANH SÁCH TOP KHÁCH
+838-                        </h3>
+839-                        <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full ml-1">
+840-                            {customerList.length} khách
+841-                        </span>
+842-                    </div>
+843-                    <button 
+844-                        onClick={onClose} 
+845-                        className="bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-600 hover:bg-gray-300"
+846-                    >
+847-                        ✕
+848-                    </button>
+849-                </div>
+850-
+851-                {/* Filters & Search */}
+852-                <div className="p-3 bg-gray-50 border-b border-gray-200 shrink-0 space-y-2.5">
+853-                    {/* Platform Tabs */}
+854-                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+855-                        <button
+856-                            onClick={() => setSelectedPlatform('all')}
+857-                            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-all cursor-pointer ${
+858-                                selectedPlatform === 'all' 
+859-                                    ? 'bg-blue-700 text-white shadow-sm' 
+860-                                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+861-                            }`}
+862-                        >
+863-                            🌐 Tất cả
+864-                        </button>
+865-                        {(['tiktok', 'facebook', 'shopee'] as Platform[]).map(p => (
+866-                            <button
+867-                                key={p}
+868-                                onClick={() => setSelectedPlatform(p)}
+869-                                className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-all cursor-pointer ${
+870-                                    selectedPlatform === p 
+871-                                        ? `${PLATFORMS[p].bgClass} text-white shadow-sm` 
+872-                                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+873-                                }`}
+874-                            >
+875-                                {PLATFORMS[p].label}
+876-                            </button>
+877-                        ))}
+878-                    </div>
+879-
+880-                    {/* Search Bar */}
+881-                    <div className="relative flex items-center">
+882-                        <input
+883-                            type="text"
+884-                            value={searchTerm}
+885-                            onChange={e => setSearchTerm(e.target.value)}
+886-                            placeholder="🔍 Tìm nhanh tên top khách..."
+887-                            className="w-full pl-3 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+888-                        />
+889-                        {searchTerm && (
+890-                            <button
+891-                                onClick={() => setSearchTerm('')}
+892-                                className="absolute right-2 text-gray-400 hover:text-gray-600 text-xs font-bold bg-gray-200 rounded-full w-5 h-5 flex items-center justify-center"
+893-                            >
+894-                                ✕
+895-                            </button>
+896-                        )}
+897-                    </div>
+898-                </div>
+899-
+900-                {/* Customer List */}
+901-                <div className="overflow-y-auto flex-1 p-3 bg-gray-100 space-y-2">
+902-                    {customerList.length === 0 ? (
+903-                        <div className="text-center text-gray-500 py-12 bg-white rounded-xl border border-dashed border-gray-300">
+904-                            {searchTerm ? `Không tìm thấy top khách nào khớp với "${searchTerm}"` : 'Chưa có dữ liệu top khách'}
+905-                        </div>
+906-                    ) : (
+907-                        customerList.map((item, idx) => (
+908-                            <div 
+909-                                key={`${item.platform}-${item.user}`} 
+910-                                className="bg-white p-2.5 rounded-xl shadow-2xs border border-gray-200 flex flex-wrap items-center justify-between gap-2 hover:border-blue-300 transition-colors"
+911-                            >
+912-                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+913-                                    <span className="text-xs font-bold text-gray-400 w-5 text-right shrink-0">
+914-                                        {idx + 1}.
+915-                                    </span>
+916-                                    <span 
+917-                                        className={`text-[12px] px-1.5 py-0.5 rounded text-white font-medium shrink-0 ${PLATFORMS[item.platform].bgClass}`}
+918-                                        title={PLATFORMS[item.platform].label.split(' ')[1]}
+919-                                    >
+920-                                        {PLATFORMS[item.platform].label.split(' ')[0]}
+921-                                    </span>
+922-                                    
+923-                                    <button
+924-                                        onClick={() => onOpenProfile?.(item.user, item.platform)}
+925-                                        className="font-bold text-gray-900 hover:text-blue-700 hover:underline cursor-pointer text-[15px] leading-tight break-all whitespace-normal bg-transparent p-0 border-0 text-left mx-1"
+926-                                        title="Bấm để xem hồ sơ chi tiết top khách"
+927-                                    >
+928-                                        {item.user}
+929-                                    </button>
+930-
+931-                                    {/* Customer Tag Badge */}
+932-                                    {item.tag !== 'NORMAL' && (
+933-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold text-white shrink-0 ${
+934-                                            item.tag === 'VIP' ? 'bg-orange-500' :
+935-                                            item.tag === 'COC' ? 'bg-cyan-600' :
+936-                                            item.tag === 'DAO' ? 'bg-gray-500' :
+937-                                            item.tag === 'CHAN' ? 'bg-black' : 'bg-red-600'
+938-                                        }`}>
+939-                                            {item.tag === 'VIP' ? '🌟' :
+940-                                             item.tag === 'COC' ? '💧' :
+941-                                             item.tag === 'DAO' ? '👻' :
+942-                                             item.tag === 'CHAN' ? '⛔' : '⚠️'}
+943-                                        </span>
+944-                                    )}
+945-
+946-                                    <CopyButton text={item.user} className="text-xs shrink-0" />
+947-                                </div>
+948-
+949-                                <div className="flex items-center gap-1.5 shrink-0">
+950-                                    <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+951-                                        {item.data.count} SP | {item.data.total}k
+952-                                    </span>

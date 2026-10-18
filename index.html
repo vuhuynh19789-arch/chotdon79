@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- PWA meta tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="In Live">
+    <meta name="application-name" content="In Live">
+    <meta name="theme-color" content="#0e1621">
+    
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png">
+    
+    <meta name="description" content="Ứng dụng chốt đơn livestream đa nền tảng và quản lý đơn hàng TikTok, Facebook, Shopee" />
+    <meta property="og:title" content="Chốt Đơn Live" />
+    <meta property="og:description" content="Ứng dụng chốt đơn livestream đa nền tảng và quản lý đơn hàng TikTok, Facebook, Shopee" />
+    <title>Chốt Đơn Live</title>
+    <script>
+      (function() {
+        var pattern = /(ResizeObserver loop (limit exceeded|completed with undelivered notifications)|flushSync was called from inside a lifecycle method|WebSocket closed without opened|\[vite\])/i;
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message ? String(e.message) : '') + (e && e.target && e.target.src ? String(e.target.src) : '');
+          if (pattern.test(msg)) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.preventDefault) e.preventDefault();
+            return;
+          }
+          // Tự động phục hồi khi trình duyệt bị vướng cache chunk cũ sau khi build/deploy
+          if (msg.indexOf('Failed to fetch dynamically imported module') !== -1 || 
+              msg.indexOf('Loading chunk') !== -1 || 
+              msg.indexOf('Failed to load module') !== -1) {
+            var key = 'slp_chunk_reload_' + (window.location.pathname || '/');
+            if (!sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, '1');
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  for (var i = 0; i < regs.length; i++) {
+                    regs[i].unregister();
+                  }
+                });
+              }
+              if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                  for (var i = 0; i < keys.length; i++) {
+                    caches.delete(keys[i]);
+                  }
+                });
+              }
+              window.location.reload();
+            }
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = e && e.reason ? String(e.reason.message || e.reason) : '';
+          if (pattern.test(reason)) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.preventDefault) e.preventDefault();
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

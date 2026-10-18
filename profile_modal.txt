@@ -1,0 +1,201 @@
+612:export function ProfileModal({ user, platform, onClose }: { user: string, platform: Platform, onClose: () => void }) {
+613-    const store = useStore();
+614-    
+615-    const cust = store[platform].customers[user];
+616-    const initialNickname = store[platform].nicknames?.[user] || "";
+617-    const [nickname, setNickname] = useState(initialNickname);
+618-    const tag = store[platform].tags[user] || 'NORMAL';
+619-    
+620-    // Find avatar if available
+621-    const commentWithAvatar = store[platform].comments.find(c => c.user === user && c.avatar);
+622-    const avatarUrl = commentWithAvatar?.avatar;
+623-
+624-    return (
+625-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+626-            <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+627-                {/* Header banner */}
+628-                <div className={`h-24 relative ${PLATFORMS[platform].bgClass} flex items-end justify-center pb-4 shrink-0`}>
+629-                    <button onClick={onClose} className="absolute top-3 right-3 bg-black/20 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/40 backdrop-blur font-bold">✕</button>
+630-                    {avatarUrl ? (
+631-                        <img src={avatarUrl} alt="avatar" className="w-20 h-20 rounded-full absolute -bottom-10 border-4 border-white object-cover bg-white shadow-md" />
+632-                    ) : (
+633-                        <div className="w-20 h-20 rounded-full absolute -bottom-10 border-4 border-white bg-gray-200 flex items-center justify-center shadow-md">
+634-                            <span className="text-3xl">👤</span>
+635-                        </div>
+636-                    )}
+637-                </div>
+638-                
+639-                <div className="overflow-y-auto flex-1 pt-12 px-5 pb-5">
+640-                    <div className="text-center mb-1">
+641-                        <span className={`text-xs px-2 py-0.5 rounded text-white ${PLATFORMS[platform].bgClass}`}>{PLATFORMS[platform].label}</span>
+642-                    </div>
+643-                    
+644-                    <div className="flex items-center justify-center gap-2 mb-4">
+645-                        <div className="text-2xl font-black text-gray-900 text-center break-all">{user}</div>
+646-                        <CopyButton text={user} className="text-lg" />
+647-                    </div>
+648-                    <div className="mb-6 flex flex-col gap-1">
+649-                        <label className="text-xs font-bold text-gray-500 ml-1">Tên gợi nhớ:</label>
+650-                        <input
+651-                            type="text"
+652-                            value={nickname}
+653-                            onChange={e => setNickname(e.target.value)}
+654-                            onBlur={() => store.setCustomerNickname(platform, user, nickname.trim())}
+655-                            placeholder="VD: Chị Bảy chốt đơn..."
+656-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-800 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+657-                        />
+658-                    </div>
+659-                    
+660-                    <div className="grid grid-cols-2 gap-3 mb-6">
+661-                        <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl text-center">
+662-                            <div className="text-xs font-bold text-blue-600 mb-1">ĐÃ CHỐT</div>
+663-                            <div className="text-xl font-black text-blue-800">{cust ? cust.count : 0} <span className="text-sm font-normal text-blue-600">đơn</span></div>
+664-                        </div>
+665-                        <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-center">
+666-                            <div className="text-xs font-bold text-red-600 mb-1">TỔNG CỘNG</div>
+667-                            <div className="text-xl font-black text-red-800">{cust ? cust.total : 0}k</div>
+668-                        </div>
+669-                    </div>
+670-                    
+671-                    <div className="mb-5 bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex items-center justify-between gap-2 overflow-x-auto">
+672-                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider shrink-0 ml-1">🏷️ Nhãn:</span>
+673-                        <div className="flex flex-wrap gap-1 shrink-0">
+674-                            {(['NORMAL', 'VIP', 'COC', 'DAO', 'BOM', 'CHAN', 'HOST'] as const).map(t => (
+675-                                <button
+676-                                    key={t}
+677-                                    onClick={() => store.setCustomerTag(platform, user, t)}
+678-                                    className={`py-1 px-2.5 text-[11px] font-bold rounded-md border transition-all cursor-pointer ${tag === t ? (
+679-                                        t === 'NORMAL' ? 'bg-green-600 border-green-600 text-white shadow-sm' :
+680-                                        t === 'VIP' ? 'bg-orange-500 border-orange-500 text-white shadow-sm' :
+681-                                        t === 'COC' ? 'bg-cyan-600 border-cyan-600 text-white shadow-sm' :
+682-                                        t === 'DAO' ? 'bg-gray-500 border-gray-500 text-white shadow-sm' :
+683-                                        t === 'CHAN' ? 'bg-black border-black text-white shadow-sm' :
+684-                                        t === 'HOST' ? 'bg-purple-600 border-purple-600 text-white shadow-sm' :
+685-                                        'bg-red-600 border-red-600 text-white shadow-sm'
+686-                                    ) : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+687-                                >
+688-                                    {t === 'NORMAL' ? 'Thường' :
+689-                                     t === 'VIP' ? '🌟 Quen' :
+690-                                     t === 'COC' ? '💧 Cọc' :
+691-                                     t === 'DAO' ? '👻 Dạo' :
+692-                                     t === 'CHAN' ? '⛔ Chặn' :
+693-                                     t === 'HOST' ? '👑' : '⚠️ BOM'}
+694-                                </button>
+695-                            ))}
+696-                        </div>
+697-                    </div>
+698-                    
+699-                    <div className="mb-6">
+700-                        <div className="text-sm font-bold text-gray-800 mb-3 flex justify-between items-center">
+701-                            <span>🛒 Đơn chốt phiên này</span>
+702-                        </div>
+703-                        <div className="space-y-3">
+704-                            {(!cust || !cust.items || cust.items.length === 0) ? (
+705-                                <div className="text-center text-gray-400 py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-xs">Phiên này chưa chốt đơn nào.</div>
+706-                            ) : (
+707-                                [...cust.items].reverse().map((item, idx) => (
+708-                                    <div key={idx} className="flex justify-between items-center bg-green-50/40 border border-green-100 rounded-xl p-3 gap-3">
+709-                                        <div className="flex-1 min-w-0">
+710-                                            <div className="text-gray-800 font-bold text-sm truncate">{item.content}</div>
+711-                                            <div className="text-blue-700 font-bold text-sm mt-0.5">{item.price}k</div>
+712-                                        </div>
+713-                                        <div className="flex flex-col gap-1.5 shrink-0">
+714-                                            <button 
+715-                                                onClick={() => {
+716-                                                    let time = new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'});
+717-                                                    printLabel(store[platform].nicknames?.[user] ? `${user} (${store[platform].nicknames[user]})` : user, item.content === "(Không ghi chú)" ? "" : item.content, item.price, time, PLATFORMS[platform].label);
+718-                                                }}
+719-                                                className="bg-green-600 hover:bg-green-700 text-white rounded-md px-3 py-1.5 font-bold text-xs"
+720-                                            >
+721-                                                🖨️ IN LẠI
+722-                                            </button>
+723-                                            <DeleteConfirmButton 
+724-                                                onDelete={() => store.deleteOrderItem(platform, user, idx, false)}
+725-                                                className="rounded-md px-3 py-1.5"
+726-                                            />
+727-                                        </div>
+728-                                    </div>
+729-                                ))
+730-                            )}
+731-                        </div>
+732-                    </div>
+733-                    
+734-                    <div>
+735-                        <div className="text-sm font-bold text-gray-800 mb-3 flex justify-between items-center">
+736-                            <span>📜 Lịch sử chốt đơn cũ</span>
+737-                        </div>
+738-                        <div className="space-y-3">
+739-                            {(!cust || !cust.pastItems || cust.pastItems.length === 0) ? (
+740-                                <div className="text-center text-gray-400 py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-xs">Chưa có lịch sử chốt đơn các phiên trước.</div>
+741-                            ) : (
+742-                                cust.pastItems.map((item, idx) => {
+743-                                    const d = new Date(item.createdAt || parseInt(item.id.substring(0,13)) || Date.now());
+744-                                    const dateStr = d.toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit'});
+745-                                    return (
+746-                                    <div key={`past-${idx}`} className={`flex justify-between items-center bg-gray-50 border border-gray-100 rounded-xl p-3 gap-3 ${item.shipped ? 'opacity-60' : ''}`}>
+747-                                        <div className="flex items-start gap-3 flex-1 min-w-0">
+748-                                            <div className="pt-1 shrink-0">
+749-                                                <input 
+750-                                                    type="checkbox" 
+751-                                                    checked={!!item.shipped} 
+752-                                                    onChange={() => store.togglePastItemShipped(platform, user, idx)}
+753-                                                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+754-                                                />
+755-                                            </div>
+756-                                            <div className="flex-1 min-w-0">
+757-                                                <div className="flex items-center gap-2 mb-1">
+758-                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded uppercase">{dateStr}</span>
+759-                                                    {item.shipped && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">ĐÃ GỬI</span>}
+760-                                                </div>
+761-                                                <div className={`text-gray-600 font-medium text-sm truncate ${item.shipped ? 'line-through' : ''}`}>{item.content}</div>
+762-                                                <div className="text-gray-700 font-bold text-sm mt-0.5">{item.price}k</div>
+763-                                            </div>
+764-                                        </div>
+765-                                        <div className="flex flex-col gap-1.5 shrink-0">
+766-                                            <button 
+767-                                                onClick={() => {
+768-                                                    let time = new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'});
+769-                                                    printLabel(store[platform].nicknames?.[user] ? `${user} (${store[platform].nicknames[user]})` : user, item.content === "(Không ghi chú)" ? "" : item.content, item.price, time, PLATFORMS[platform].label);
+770-                                                }}
+771-                                                className="bg-green-600 hover:bg-green-700 text-white rounded-md px-3 py-1.5 font-bold text-xs"
+772-                                            >
+773-                                                🖨️ IN LẠI
+774-                                            </button>
+775-                                            <DeleteConfirmButton 
+776-                                                onDelete={() => store.deleteOrderItem(platform, user, idx, true)}
+777-                                                className="rounded-md px-3 py-1.5"
+778-                                            />
+779-                                        </div>
+780-                                    </div>
+781-                                )})
+782-                            )}
+783-                        </div>
+784-                    </div>
+785-                </div>
+786-            </div>
+787-        </div>
+788-    );
+789-}
+790-
+791-export function CustomersModal({
+792-    onClose,
+793-    onOpenProfile,
+794-    onOpenNewOrder
+795-}: {
+796-    onClose: () => void;
+797-    onOpenProfile?: (u: string, p: Platform) => void;
+798-    onOpenNewOrder?: (u: string, p: Platform) => void;
+799-}) {
+800-    const store = useStore();
+801-    const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
+802-    const [searchTerm, setSearchTerm] = useState('');
+803-
+804-    let customerList: { user: string; platform: Platform; data: CustomerData; tag: string }[] = [];
+805-
+806-    (['tiktok', 'facebook', 'shopee'] as Platform[]).forEach(p => {
+807-        if (selectedPlatform !== 'all' && selectedPlatform !== p) return;
+808-        const custs = store[p].customers;
+809-        Object.keys(custs).forEach(user => {
+810-            const data = custs[user];
+811-            const tag = store[p].tags[user] || 'NORMAL';
+812-            customerList.push({ user, platform: p, data, tag });
