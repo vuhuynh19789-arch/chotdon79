@@ -988,6 +988,22 @@ app.get("/api/proxy-avatar", async (req, res) => {
 // ==========================================
 const DEFAULT_PANCAKE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiSWFtaGllbiBoaWVucGhhbTIuMCIsImV4cCI6MTc5Njg4MjYxMiwiYXBwbGljYXRpb24iOjEsInVpZCI6ImI5Y2IyMzQwLTRlMWItNGQ4NS05YWMyLTAxMjRiYjJkOTFlYyIsInNlc3Npb25faWQiOiI4OTFhNTAyMC02ZjU4LTRhMjMtOWVjNi0wNTZkMWU0NGM2ZjAiLCJpYXQiOjE3ODkxMDY2MTIsInBhbmNha2VfaWQiOiI3MTdkMjIwNS0wN2NkLTQxN2YtOGNlZi1hZmNlODgwODgwMzQiLCJmYl9pZCI6IjE0NTkyNjMxMTQ2ODI1NCIsImxvZ2luX3Nlc3Npb24iOm51bGwsImZiX25hbWUiOiJJYW1oaWVuIGhpZW5waGFtMi4wIn0.NABY5AILX_Bhy0ijUQc6o852SYPwnEjClqcFuPLAF-4";
 
+// Endpoint cung cấp cấu hình chuẩn từ Server để người dùng đồng bộ trực tiếp vào App Settings
+app.get("/api/pancake/server-config", async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      token: DEFAULT_PANCAKE_TOKEN,
+      shopId: "30093990",
+      shopName: "Phạm Ngọc Hiền Store",
+      warehouseId: "9872be82-80b0-4486-9260-2b625b2e0325",
+      proxyUrl: "/api/pancake/push-order"
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get("/api/pancake/pages", async (req, res) => {
   try {
     const token = (req.query.token as string || DEFAULT_PANCAKE_TOKEN).trim();

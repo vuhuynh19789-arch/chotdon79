@@ -10,7 +10,8 @@ import {
 import { 
   OrderPushSettings, OrderPushMode, OrderPayloadFormat,
   getOrderPushSettings, saveOrderPushSettings, resetOrderPushSettings, 
-  testOrderPushApiConnection, autoDiscoverPancakeShops, DEFAULT_PANCAKE_TOKEN 
+  testOrderPushApiConnection, autoDiscoverPancakeShops, DEFAULT_PANCAKE_TOKEN,
+  fetchServerPancakeConfig
 } from '../lib/orderPushSettings';
 import { useSwipeToDismiss } from '../lib/useSwipeToDismiss';
 
@@ -26,6 +27,7 @@ export const OrderPushSettingsModal: React.FC<OrderPushSettingsModalProps> = ({ 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; latencyMs: number; message: string } | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [isSyncingServer, setIsSyncingServer] = useState(false);
   const [discoveredShops, setDiscoveredShops] = useState<any[]>([]);
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
@@ -33,7 +35,15 @@ export const OrderPushSettingsModal: React.FC<OrderPushSettingsModalProps> = ({ 
 
   useEffect(() => {
     if (isOpen) {
-      setSettings(getOrderPushSettings());
+      const current = getOrderPushSettings();
+      // Tự động sửa nếu dính token cũ không hợp lệ hoặc thiếu shop
+      if (!current.pancakeToken || current.pancakeToken.includes('33892f90cd938635c008ca04cce31829')) {
+        current.pancakeToken = DEFAULT_PANCAKE_TOKEN;
+        current.shopId = current.shopId || '30093990';
+        current.warehouseId = current.warehouseId || '9872be82-80b0-4486-9260-2b625b2e0325';
+        saveOrderPushSettings(current);
+      }
+      setSettings(current);
       setTestResult(null);
       setSaveSuccessMsg('');
     }
@@ -106,6 +116,48 @@ export const OrderPushSettingsModal: React.FC<OrderPushSettingsModalProps> = ({ 
       }
     } finally {
       setIsDiscovering(false);
+    }
+  };
+
+  const handleSyncFromServer = async () => {
+    setIsSyncingServer(true);
+    setTestResult(null);
+    try {
+      const srv = await fetchServerPancakeConfig();
+      if (srv.success && srv.token) {
+        const newSettings: OrderPushSettings = {
+          ...settings,
+          pancakeToken: srv.token,
+          shopId: srv.shopId || '30093990',
+          warehouseId: srv.warehouseId || '9872be82-80b0-4486-9260-2b625b2e0325'
+        };
+        setSettings(newSettings);
+        saveOrderPushSettings(newSettings);
+
+        // Kiểm tra kết nối tức thì
+        const testRes = await testOrderPushApiConnection(newSettings);
+        setTestResult({
+          success: true,
+          latencyMs: testRes.latencyMs || 150,
+          message: `Đã nạp Token & Cửa Hàng từ Máy Chủ thành công! Shop: ${srv.shopName} (#${srv.shopId}). Cấu hình đã được lưu trực tiếp vào thiết bị của bạn.`
+        });
+        setSaveSuccessMsg('Đã đồng bộ Token & Cửa Hàng từ Máy Chủ vào thiết bị!');
+        setTimeout(() => setSaveSuccessMsg(''), 4000);
+      } else {
+        setTestResult({
+          success: false,
+          latencyMs: 0,
+          message: srv.error || 'Không thể lấy cấu hình từ máy chủ.'
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        latencyMs: 0,
+        message: `Lỗi kết nối máy chủ: ${err?.message || 'Không xác định'}`
+      });
+    } finally {
+      setIsSyncingServer(false);
     }
   };
 
@@ -352,19 +404,39 @@ export const OrderPushSettingsModal: React.FC<OrderPushSettingsModalProps> = ({ 
 
           {/* 2. NẾU CHỌN CLIENT DIRECT TO PANCAKE POS HOẶC SERVER PROXY */}
           <div className="bg-[#121820] border border-white/10 rounded-xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-[13px] font-bold text-amber-300 flex items-center gap-1.5">
                 <Key size={16} /> Cấu hình Token &amp; Cửa Hàng Pancake POS
               </span>
-              <button
-                type="button"
-                onClick={handleAutoDiscover}
-                disabled={isDiscovering}
-                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={isDiscovering ? 'animate-spin' : ''} />
-                <span>{isDiscovering ? 'Đang quét...' : '⚡ Quét tự động Shop & Kho'}</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleSyncFromServer}
+                  disabled={isSyncingServer}
+                  className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/15 hover:bg-emerald-500/25 px-2.5 py-1 rounded-lg border border-emerald-500/40 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                  title="Tự động lấy Token chuẩn và Shop ID đang hoạt động từ máy chủ nạp thẳng vào App"
+                >
+                  <Sparkles size={12} className={isSyncingServer ? 'animate-spin text-emerald-400' : 'text-emerald-400'} />
+                  <span>{isSyncingServer ? 'Đang nạp...' : '⚡ Lấy từ Máy Chủ'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAutoDiscover}
+                  disabled={isDiscovering}
+                  className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Quét danh sách Shop & Kho hàng trực tiếp từ Pancake POS bằng Token này"
+                >
+                  <RefreshCw size={12} className={isDiscovering ? 'animate-spin' : ''} />
+                  <span>{isDiscovering ? 'Đang quét...' : '⚡ Quét tự động Shop & Kho'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-2 bg-emerald-950/20 border border-emerald-500/20 rounded-lg text-[11.5px] text-emerald-300/90 flex items-start gap-1.5">
+              <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Mẹo nhanh:</strong> Bấm <strong>"⚡ Lấy từ Máy Chủ"</strong> để tự động nạp Token &amp; Cửa hàng chuẩn (<strong>Phạm Ngọc Hiền Store #30093990</strong>) đang chạy trên máy chủ vào máy bạn chỉ với 1 click!
+              </span>
             </div>
 
             <div>

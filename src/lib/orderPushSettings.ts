@@ -30,7 +30,7 @@ export interface OrderPushSettings {
 }
 
 const STORAGE_KEY = 'slp_order_push_settings';
-export const DEFAULT_PANCAKE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3NfdG9rZW4iOiIzMzg5MmY5MGNkOTM4NjM1YzAwOGNhMDRjY2UzMTgyOSIsImFwcF9pZCI6IjY2ZWY5ZDk2MGRkYmFmOGE0MWRlYjc3NSIsInVzZXJfaWQiOiIyMDE4ZTA2MC0zMDJiLTQ3MTgtOGJkMi05MWRhNGRlNmJiZWYifQ.3gK0uS5h39z7uTz8Y7kX_fB5r-x4Lz7H3p6a_m4k1_0";
+export const DEFAULT_PANCAKE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiSWFtaGllbiBoaWVucGhhbTIuMCIsImV4cCI6MTc5Njg4MjYxMiwiYXBwbGljYXRpb24iOjEsInVpZCI6ImI5Y2IyMzQwLTRlMWItNGQ4NS05YWMyLTAxMjRiYjJkOTFlYyIsInNlc3Npb25faWQiOiI4OTFhNTAyMC02ZjU4LTRhMjMtOWVjNi0wNTZkMWU0NGM2ZjAiLCJpYXQiOjE3ODkxMDY2MTIsInBhbmNha2VfaWQiOiI3MTdkMjIwNS0wN2NkLTQxN2YtOGNlZi1hZmNlODgwODgwMzQiLCJmYl9pZCI6IjE0NTkyNjMxMTQ2ODI1NCIsImxvZ2luX3Nlc3Npb24iOm51bGwsImZiX25hbWUiOiJJYW1oaWVuIGhpZW5waGFtMi4wIn0.NABY5AILX_Bhy0ijUQc6o852SYPwnEjClqcFuPLAF-4";
 
 export const DEFAULT_ORDER_PUSH_SETTINGS: OrderPushSettings = {
   // Mặc định dùng Client Direct hoặc Server với Auto-Failover để không bao giờ bị nghẽn
@@ -61,15 +61,24 @@ export function getOrderPushSettings(): OrderPushSettings {
       // Nếu chưa có, lấy token hiện tại từ pancake_token nếu có
       const legacyToken = localStorage.getItem('pancake_token');
       const initial = { ...DEFAULT_ORDER_PUSH_SETTINGS };
-      if (legacyToken) {
+      if (legacyToken && !legacyToken.includes('33892f90cd938635c008ca04cce31829')) {
         initial.pancakeToken = legacyToken.trim();
       }
       return initial;
     }
     const parsed = JSON.parse(raw);
+    let token = (parsed.pancakeToken || '').trim();
+    // Tự động thay thế nếu dính token cũ không có shop
+    if (!token || token.includes('33892f90cd938635c008ca04cce31829') || token.includes('3gK0uS5h39z7uTz8Y7kX_fB5r-x4Lz7H3p6a_m4k1_0')) {
+      token = DEFAULT_PANCAKE_TOKEN;
+    }
+
     return {
       ...DEFAULT_ORDER_PUSH_SETTINGS,
-      ...parsed
+      ...parsed,
+      pancakeToken: token,
+      shopId: parsed.shopId || '30093990',
+      warehouseId: parsed.warehouseId || '9872be82-80b0-4486-9260-2b625b2e0325'
     };
   } catch (err) {
     console.warn("Lỗi đọc cấu hình order push settings:", err);
@@ -333,4 +342,41 @@ export async function autoDiscoverPancakeShops(
       error: err?.message || 'Không thể liên lạc với máy chủ Pancake'
     };
   }
+}
+
+/**
+ * Lấy cấu hình Token và Shop chuẩn từ Server để nạp tự động vào App Settings
+ */
+export async function fetchServerPancakeConfig(): Promise<{
+  success: boolean;
+  token: string;
+  shopId: string;
+  shopName: string;
+  warehouseId: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/pancake/server-config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.token) {
+        return {
+          success: true,
+          token: data.token,
+          shopId: data.shopId || '30093990',
+          shopName: data.shopName || 'Phạm Ngọc Hiền Store',
+          warehouseId: data.warehouseId || '9872be82-80b0-4486-9260-2b625b2e0325'
+        };
+      }
+    }
+  } catch (err) {}
+
+  // Fallback nếu không gọi được server hoặc ở môi trường static
+  return {
+    success: true,
+    token: DEFAULT_PANCAKE_TOKEN,
+    shopId: '30093990',
+    shopName: 'Phạm Ngọc Hiền Store',
+    warehouseId: '9872be82-80b0-4486-9260-2b625b2e0325'
+  };
 }
