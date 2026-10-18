@@ -13,6 +13,8 @@
 import { parsePancakeContact } from './pancakeDeepLink';
 import { getShortId } from './core';
 import { registerCustomerAvatar, isGhostZeroPriceItem } from '../store';
+import { getOrderPushSettings } from './orderPushSettings';
+import { pushOrderDirectlyFromBrowser, pushOrderToCustomApi } from './pancakeDirectPush';
 
 export interface PancakeOrderInfo {
   id: number | string;
@@ -1599,34 +1601,101 @@ export async function lookupCustomerByPhone(phone: string): Promise<{
  * Đẩy đơn hàng của khách hàng lên Pancake POS
  */
 export async function pushCustomerOrderToPancake(payload: PushOrderPayload): Promise<PushOrderResult> {
+  const pushSettings = getOrderPushSettings();
+
   try {
-    const token = getPancakeToken();
-    const res = await fetch(`/api/pancake/push-order?token=${encodeURIComponent(token)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    let result: PushOrderResult;
 
-    const resText = await res.text();
-    let data: any = null;
-    try {
-      data = JSON.parse(resText);
-    } catch {
-      const cleanErr = resText.includes("FUNCTION_INVOCATION_FAILED") || res.status === 504 || res.status === 502
-        ? "Máy chủ phản hồi chậm hoặc đang xử lý. Vui lòng kiểm tra lại SĐT khách hoặc bấm Thử lại!"
-        : `Lỗi phản hồi máy chủ (${res.status}): ${resText.slice(0, 120)}`;
-      return {
-        success: false,
-        error: cleanErr
-      };
+    // 1. Chế độ Custom API / Webhook riêng (Vercel API, Make, n8n, Google Apps Script...)
+    if (pushSettings.mode === 'custom_api' && pushSettings.customApiUrl?.trim()) {
+      result = await pushOrderToCustomApi(payload, pushSettings);
+    } 
+    // 2. Chế độ Đẩy trực tiếp từ trình duyệt (Client-Side Direct to Pancake POS)
+    // Cực kỳ nhanh, không qua server trung gian, không bao giờ bị timeout 504 Vercel!
+    else if (pushSettings.mode === 'client_direct') {
+      result = await pushOrderDirectlyFromBrowser(payload, pushSettings);
+    } 
+    // 3. Chế độ Máy chủ Proxy (Server Proxy) với cơ chế Tự động Failover thông minh
+    else {
+      const token = (pushSettings.pancakeToken || getPancakeToken()).trim();
+      const proxyUrl = pushSettings.proxyUrl || '/api/pancake/push-order';
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 9500);
+
+        const res = await fetch(`${proxyUrl}?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        const resText = await res.text();
+        let data: any = null;
+        try {
+          data = JSON.parse(resText);
+        } catch {
+          data = null;
+        }
+
+        const isServerTimeoutOrError = 
+          !res.ok && (
+            res.status === 504 || 
+            res.status === 502 || 
+            res.status === 503 ||
+            resText.includes("FUNCTION_INVOCATION_FAILED") ||
+            resText.includes("GATEWAY_TIMEOUT")
+          );
+
+        if (isServerTimeoutOrError && pushSettings.autoFailoverToClient) {
+          console.warn("⚠️ [Failover] Máy chủ phản hồi chậm hoặc timeout Vercel. Tự động chuyển sang Đẩy trực tiếp từ trình duyệt...");
+          result = await pushOrderDirectlyFromBrowser(payload, pushSettings);
+          if (result.success) {
+            result.message = `${result.message || 'Đẩy đơn thành công!'} (Tự động chuyển Đẩy trực tiếp do máy chủ chậm)`;
+          }
+        } else if (!res.ok || (data && !data.success)) {
+          const cleanErr = (resText.includes("FUNCTION_INVOCATION_FAILED") || res.status === 504 || res.status === 502)
+            ? "Máy chủ phản hồi chậm hoặc đang xử lý. Bạn có thể bật 'Đẩy trực tiếp từ trình duyệt' trong Cài đặt API Đẩy Đơn để đẩy tức thì!"
+            : (data?.error || data?.message || `Lỗi phản hồi máy chủ (${res.status}): ${resText.slice(0, 100)}`);
+          result = {
+            success: false,
+            error: cleanErr
+          };
+        } else {
+          result = {
+            success: true,
+            message: data?.message || "Tạo đơn trên Pancake POS thành công!",
+            order: data?.order,
+            messageSent: data?.messageSent,
+            messageError: data?.messageError,
+            conversationId: data?.conversationId,
+            pageId: data?.pageId
+          };
+        }
+      } catch (fetchErr: any) {
+        // Nếu fetch bị timeout hoặc lỗi mạng máy chủ và có bật auto failover
+        if (pushSettings.autoFailoverToClient) {
+          console.warn("⚠️ [Failover Timeout] Quá thời gian chờ máy chủ. Tự động chuyển sang Đẩy trực tiếp từ trình duyệt...");
+          result = await pushOrderDirectlyFromBrowser(payload, pushSettings);
+          if (result.success) {
+            result.message = `${result.message || 'Đẩy đơn thành công!'} (Tự động chuyển Đẩy trực tiếp do máy chủ chậm)`;
+          }
+        } else {
+          result = {
+            success: false,
+            error: `Lỗi kết nối máy chủ: ${fetchErr?.message || 'Quá thời gian phản hồi'}. Hãy chọn Đẩy trực tiếp trong Cài đặt!`
+          };
+        }
+      }
     }
 
-    if (!res.ok || !data.success) {
-      return {
-        success: false,
-        error: data.error || data.message || "Không thể tạo đơn hàng trên Pancake POS"
-      };
+    if (!result.success) {
+      return result;
     }
+
+    const data = result;
 
     if (data.order && payload.user) {
       const o = data.order;

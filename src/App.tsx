@@ -1,7 +1,7 @@
 import { PWAInstallButton } from './components/PWAInstallButton';
 import PrintServer from "./components/PrintServer";
 import React, { useEffect, useState, useMemo, useRef, useCallback, useDeferredValue } from 'react';
-import { MoreVertical, Search as SearchIcon, Home, MessageSquare, Users, PlusCircle, Maximize, Trash2, RefreshCw, Bot, ShoppingCart, BarChart3, Radio, Tv, Bell } from 'lucide-react';
+import { MoreVertical, Search as SearchIcon, Home, MessageSquare, Users, PlusCircle, Maximize, Trash2, RefreshCw, Bot, ShoppingCart, BarChart3, Radio, Tv, Bell, Sliders } from 'lucide-react';
 import { useStore, getCustomerAvatar, isGhostZeroPriceItem, scrubGhostItemsFromStore, isCustomerGheLay } from './store';
 import { PLATFORMS, Platform, getShortId, normalizeUser, addRecentSearchPrice, extractPriceFromContent, removeVietnameseAccents, APP_VERSION } from './lib/core';
 import { SearchBar, SearchSuggestionItem } from './components/SearchBar';
@@ -16,6 +16,7 @@ import { ClearFeedModal } from './components/ClearFeedModal';
 import { ResetSessionModal } from './components/ResetSessionModal';
 import { SmartLiveMonitor } from './components/SmartLiveMonitor';
 import { LiveSupervisorModal } from './components/LiveSupervisorModal';
+import { OrderPushSettingsModal } from './components/OrderPushSettingsModal';
 import { 
   startDistributedMasterCoordinator, 
   subscribeTikTokStatus, 
@@ -86,6 +87,7 @@ export default function App() {
   const [tikTokStatus, setTikTokStatus] = useState<TikTokLiveStatus>(getTikTokStatus());
   const [showFacebookLiveModal, setShowFacebookLiveModal] = useState(false);
   const [facebookStatus, setFacebookStatus] = useState<FacebookLiveStatus>(getFacebookStatus());
+  const [showOrderPushSettingsModal, setShowOrderPushSettingsModal] = useState(false);
   const lastScrollLeftRef = useRef(0);
 
   // Auto-hide navigation after 5 seconds of inactivity/appearance
@@ -788,6 +790,21 @@ export default function App() {
                                 <Bot size={18} className="text-[#4ade80]" />
                                 <span>Auto Comment</span>
                             </button>
+                            <button 
+                                onClick={() => { setShowMenu(false); setShowOrderPushSettingsModal(true); }} 
+                                className="w-full text-left px-4 py-3 text-[14px] text-white hover:bg-white/10 flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-transparent border-t border-b border-white/5 cursor-pointer"
+                            >
+                                <Sliders size={18} className="text-amber-400" />
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-semibold text-amber-300">Cài đặt API Đẩy Đơn</span>
+                                        <span className="text-[9px] font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">Mới</span>
+                                    </div>
+                                    <div className="text-[11px] text-gray-400">
+                                        Lưu trên App • Đẩy trực tiếp • Không nghẽn Vercel
+                                    </div>
+                                </div>
+                            </button>
                             <button onClick={() => { setShowMenu(false); toggleFullscreen(); }} className="w-full text-left px-4 py-3 text-[14px] text-white hover:bg-white/10 flex items-center gap-3">
                                 <Maximize size={18} className="text-gray-400" />
                                 <span>Toàn màn hình</span>
@@ -1194,6 +1211,12 @@ export default function App() {
         <PancakeSyncModal 
             isOpen={showPancakeSyncModal} 
             onClose={() => setShowPancakeSyncModal(false)} 
+        />
+
+        <OrderPushSettingsModal
+            isOpen={showOrderPushSettingsModal}
+            onClose={() => setShowOrderPushSettingsModal(false)}
+            onSuccess={(msg) => triggerToast(msg)}
         />
 
         {toastNotification && (

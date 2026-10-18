@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   RefreshCw, CheckCircle2, AlertCircle, ShoppingBag, MessageSquare, 
   ExternalLink, Phone, MapPin, Search, Sparkles, Key, Check,
-  ChevronRight, ArrowRight, UserCheck, ShieldCheck, X
+  ChevronRight, ArrowRight, UserCheck, ShieldCheck, X, Sliders, Zap
 } from 'lucide-react';
+import { OrderPushSettingsModal } from './OrderPushSettingsModal';
 import { 
   getPancakeToken, setPancakeToken, runPancakeSmartSync, 
   getCustomerInsightsCache, getPancakeSyncStats, PancakeCustomerInsight, 
@@ -31,6 +32,7 @@ export const PancakeSyncModal: React.FC<PancakeSyncModalProps> = ({ isOpen, onCl
   const [stats, setStats] = useState<PancakeSyncStats | null>(getPancakeSyncStats());
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'regular' | 'new' | 'delivering'>('all');
+  const [showPushSettingsModal, setShowPushSettingsModal] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -231,12 +233,23 @@ export const PancakeSyncModal: React.FC<PancakeSyncModalProps> = ({ isOpen, onCl
                   {tokenInput ? `${tokenInput.substring(0, 16)}...${tokenInput.slice(-8)}` : "Chưa cài đặt"}
                 </span>
               </div>
-              <button
-                onClick={() => setIsEditingToken(!isEditingToken)}
-                className="text-blue-400 hover:text-blue-300 font-semibold text-xs transition-colors"
-              >
-                {isEditingToken ? "Đóng" : "Thay đổi Token"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPushSettingsModal(true)}
+                  className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 font-semibold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Cài đặt API Đẩy Đơn (Tránh lỗi server phản hồi chậm / Vercel)"
+                >
+                  <Sliders size={12} />
+                  <span>⚙️ API Đẩy Đơn</span>
+                </button>
+                <button
+                  onClick={() => setIsEditingToken(!isEditingToken)}
+                  className="text-blue-400 hover:text-blue-300 font-semibold text-xs transition-colors"
+                >
+                  {isEditingToken ? "Đóng" : "Thay đổi Token"}
+                </button>
+              </div>
             </div>
 
             {isEditingToken && (
@@ -443,6 +456,15 @@ export const PancakeSyncModal: React.FC<PancakeSyncModalProps> = ({ isOpen, onCl
           </button>
         </div>
       </div>
+
+      <OrderPushSettingsModal
+        isOpen={showPushSettingsModal}
+        onClose={() => setShowPushSettingsModal(false)}
+        onSuccess={(msg) => {
+          setTokenInput(getPancakeToken());
+          onSuccess?.(msg);
+        }}
+      />
     </div>
   );
 };

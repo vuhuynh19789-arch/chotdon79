@@ -25,8 +25,14 @@ import {
   MessageSquare,
   Clipboard,
   Send,
-  MessageCircle
+  MessageCircle,
+  Sliders,
+  Zap,
+  Globe,
+  Server
 } from 'lucide-react';
+import { OrderPushSettingsModal } from './OrderPushSettingsModal';
+import { getOrderPushSettings, saveOrderPushSettings, OrderPushSettings } from '../lib/orderPushSettings';
 import { useStore, OrderItem, isCustomerNinhThuan } from '../store';
 import { Platform, PLATFORMS, getShortId, normalizeUser, printBill, APP_VERSION } from '../lib/core';
 import { CustomerAvatar, ThapChamIcon, GheLayBadge } from './UserAvatar';
@@ -120,8 +126,18 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
   const [showZaloPicker, setShowZaloPicker] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [pickingVarForIdx, setPickingVarForIdx] = useState<number | null>(null);
+  const [showPushSettingsModal, setShowPushSettingsModal] = useState(false);
+  const [pushSettings, setPushSettings] = useState<OrderPushSettings>(getOrderPushSettings());
 
-  const isChildOpen = Boolean(isCalculatorOpen || showZaloPicker || pickingVarForIdx !== null);
+  useEffect(() => {
+    const handleSettingsUpdated = (e: any) => {
+      setPushSettings(e.detail || getOrderPushSettings());
+    };
+    window.addEventListener('order_push_settings_updated', handleSettingsUpdated);
+    return () => window.removeEventListener('order_push_settings_updated', handleSettingsUpdated);
+  }, []);
+
+  const isChildOpen = Boolean(isCalculatorOpen || showZaloPicker || pickingVarForIdx !== null || showPushSettingsModal);
   const { modalStyle, touchHandlers } = useSwipeToDismiss({ 
     onClose, 
     enabled: isOpen && !isChildOpen,
@@ -805,13 +821,26 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
               </div>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 flex items-center justify-center text-white font-bold transition-all cursor-pointer"
-            title="Đóng hóa đơn"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPushSettingsModal(true)}
+              className="px-2.5 py-1 rounded-xl bg-black/30 hover:bg-black/50 border border-white/20 flex items-center gap-1.5 text-[11px] font-bold text-white transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Cài đặt API Đẩy Đơn (Chọn Đẩy trực tiếp / Custom API / Tránh lỗi server phản hồi chậm)"
+            >
+              <Sliders size={13} className="text-amber-300" />
+              <span>
+                {pushSettings.mode === 'client_direct' ? '⚡ Trực Tiếp' : pushSettings.mode === 'custom_api' ? '🔗 Custom API' : '🖥️ Server'}
+              </span>
+            </button>
+            <button 
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 flex items-center justify-center text-white font-bold transition-all cursor-pointer"
+              title="Đóng hóa đơn"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -1353,9 +1382,36 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
 
               {/* Error Banner */}
               {errorMessage && (
-                <div className="p-2.5 bg-red-500/20 border border-red-500/40 rounded-xl text-xs text-red-300 flex items-center gap-2">
-                  <AlertCircle size={14} className="shrink-0" />
-                  <span>{errorMessage}</span>
+                <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl text-xs text-red-300 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={16} className="shrink-0 text-red-400 mt-0.5" />
+                    <span className="flex-1 leading-relaxed">{errorMessage}</span>
+                  </div>
+                  {/* Gợi ý giải pháp tức thì khi máy chủ bị chậm / timeout */}
+                  <div className="pt-1 flex flex-wrap items-center gap-2 border-t border-red-500/20">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        saveOrderPushSettings({ mode: 'client_direct' });
+                        setPushSettings(getOrderPushSettings());
+                        setErrorMessage(null);
+                        await handlePushOrder();
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500 text-black font-bold text-[11px] flex items-center gap-1 hover:bg-amber-400 active:scale-95 transition-all cursor-pointer shadow-xs"
+                      title="Chuyển sang Đẩy trực tiếp từ trình duyệt đến Pancake POS và thử lại ngay lập tức"
+                    >
+                      <Zap size={13} />
+                      <span>⚡ Chuyển sang Đẩy Trực Tiếp (Khắc phục ngay)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPushSettingsModal(true)}
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Sliders size={13} className="text-amber-300" />
+                      <span>Cài đặt API Đẩy Đơn</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1424,6 +1480,15 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
           }}
         />
       )}
+
+      {/* Cài đặt API Đẩy Đơn Modal */}
+      <OrderPushSettingsModal
+        isOpen={showPushSettingsModal}
+        onClose={() => setShowPushSettingsModal(false)}
+        onSuccess={(msg) => {
+          setPushSettings(getOrderPushSettings());
+        }}
+      />
     </div>
   );
 };
