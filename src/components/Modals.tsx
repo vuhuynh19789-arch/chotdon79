@@ -1834,32 +1834,6 @@ export function ListModal({
     effectiveListSearch,
   ]);
 
-  const pushStats = useMemo(() => {
-    let ordersCount = 0;
-    let revenueK = 0;
-    let itemsCount = 0;
-
-    const platforms: Platform[] = filterPlatform ? [filterPlatform] : ['tiktok', 'facebook', 'shopee'];
-
-    platforms.forEach(p => {
-      const custs = store[p]?.customers || {};
-      Object.values(custs).forEach((c: any) => {
-        const history = c.pushHistory || [];
-        history.forEach((rec: any) => {
-          if (rec && rec.status !== 'restored') {
-            ordersCount += 1;
-            const items = rec.items || [];
-            const q = items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
-            itemsCount += q;
-            const revK = items.reduce((sum: number, it: any) => sum + (it.price || 0) * (it.quantity || 1), 0);
-            revenueK += revK;
-          }
-        });
-      });
-    });
-
-    return { ordersCount, revenueK, itemsCount };
-  }, [filterPlatform, store.tiktok.customers, store.facebook.customers, store.shopee.customers]);
 
   return (
     <div
@@ -2147,31 +2121,6 @@ export function ListModal({
           </div>
         </div>
 
-        {/* Banner Thống Kê Hiệu Quả Đẩy Đơn */}
-        <div className="bg-gradient-to-r from-orange-950/80 via-amber-950/70 to-zinc-900/90 border-b border-orange-500/30 px-3 py-2 shrink-0 flex items-center justify-between flex-wrap gap-2 text-xs shadow-md">
-          <div className="flex items-center gap-2">
-            <span className="text-base">🚀</span>
-            <span className="font-black text-orange-200 uppercase tracking-wide">
-              Hiệu quả đẩy đơn:
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="bg-orange-500/20 border border-orange-500/40 px-2.5 py-1 rounded-lg text-orange-200 font-bold flex items-center gap-1">
-              <span>Đơn đẩy:</span>
-              <strong className="text-white font-black text-sm">{pushStats.ordersCount}</strong>
-              <span>đơn</span>
-            </div>
-            <div className="bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 rounded-lg text-emerald-300 font-bold flex items-center gap-1">
-              <span>Doanh thu:</span>
-              <strong className="text-white font-black text-sm">{pushStats.revenueK.toLocaleString('vi-VN')}k</strong>
-            </div>
-            <div className="bg-cyan-500/20 border border-cyan-500/40 px-2.5 py-1 rounded-lg text-cyan-200 font-bold flex items-center gap-1" title="Số lượng sản phẩm đi giao">
-              <span>Số cái để đi:</span>
-              <strong className="text-white font-black text-sm">{pushStats.itemsCount}</strong>
-              <span>cái</span>
-            </div>
-          </div>
-        </div>
 
         {/* Thanh kết quả tìm kiếm trực tiếp trên trang Giỏ hàng */}
         {effectiveListSearch && (
