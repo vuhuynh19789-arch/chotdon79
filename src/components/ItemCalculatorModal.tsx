@@ -445,21 +445,26 @@ export function ItemCalculatorModal({
                             </div>
                         </div>
 
-                        {/* Chi tiết từng món bóc tách */}
-                        {parsedResult.items.length > 0 && (
-                            <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar pt-1">
-                                {parsedResult.items.map((it, idx) => (
+                        {/* Chi tiết từng món bóc tách - Luôn chừa sẵn dòng cố định chống nhảy giao diện làm bấm nhầm nút Xoá */}
+                        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar pt-1 min-h-[30px] h-[30px]">
+                            {parsedResult.items.length > 0 ? (
+                                parsedResult.items.map((it, idx) => (
                                     <div
                                         key={it.id || idx}
-                                        className="bg-[#121e30] border border-cyan-500/30 rounded-lg px-2 py-1 flex items-center gap-1.5 text-[10.5px] shrink-0 font-mono"
+                                        className="bg-[#121e30] border border-cyan-500/30 rounded-lg px-2 py-1 flex items-center gap-1.5 text-[10.5px] shrink-0 font-mono h-[26px]"
                                     >
                                         <span className="text-cyan-400 font-bold">#{idx + 1}</span>
                                         <span className="text-white font-bold">{it.quantity} cái × {it.unitPrice}k</span>
                                         <span className="text-emerald-400 font-black">= {it.total}k</span>
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                ))
+                            ) : (
+                                <div className="border border-dashed border-cyan-500/25 bg-cyan-950/20 rounded-lg px-2 py-1 flex items-center gap-1.5 text-[10.5px] font-mono text-cyan-400/40 select-none w-full h-[26px] shrink-0">
+                                    <span className="text-cyan-500/50 font-bold">#1</span>
+                                    <span className="text-gray-400/60 font-medium">1 cái × _k = _k (Nhập số tiền hoặc phép tính...)</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Phím tắt giá nhanh */}
