@@ -389,9 +389,9 @@ export function ItemCalculatorModal({
                             <span className="text-gray-400 font-mono">Đơn vị: k (nghìn)</span>
                         </div>
 
-                        {/* Màn hình hiển thị Công thức */}
-                        <div className="relative bg-[#02060c] rounded-xl border border-cyan-500/40 p-2.5 min-h-[52px] flex flex-col justify-center shadow-inner">
-                            <div className="flex items-center justify-between gap-2">
+                        {/* Màn hình hiển thị Công thức - Cố định kích thước chuẩn xác, không co giãn */}
+                        <div className="relative bg-[#02060c] rounded-xl border border-cyan-500/40 p-2.5 min-h-[54px] h-[54px] flex items-center justify-between gap-2 shadow-inner">
+                            <div className="w-7 h-7 shrink-0 flex items-center justify-center">
                                 {formula ? (
                                     <button
                                         type="button"
@@ -401,52 +401,61 @@ export function ItemCalculatorModal({
                                             triggerHaptic(15);
                                             setFormula('');
                                         }}
-                                        className="w-6 h-6 rounded-md bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-300 flex items-center justify-center text-xs font-bold shrink-0 cursor-pointer active:scale-90 transition-transform"
+                                        className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 flex items-center justify-center text-xs font-black cursor-pointer active:scale-90 transition-transform shadow-sm"
                                         title="Xóa phép tính"
                                     >
                                         ✕
                                     </button>
                                 ) : (
-                                    <span className="text-[11px] text-gray-500 italic shrink-0">Bấm phím số bên dưới...</span>
+                                    <span className="text-[13px] text-cyan-500/40 select-none font-mono">🧮</span>
                                 )}
+                            </div>
 
-                                <div 
-                                    ref={formulaContainerRef}
-                                    className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap hide-scrollbar py-0.5 select-text"
-                                    style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
-                                >
-                                    <div className="font-mono font-black text-2xl sm:text-3xl text-cyan-300 tracking-wider inline-flex min-w-full justify-end px-1">
-                                        {formula || '0'}
-                                    </div>
+                            <div 
+                                ref={formulaContainerRef}
+                                className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap hide-scrollbar py-0.5 select-text"
+                                style={{ touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+                            >
+                                <div className="font-mono font-black text-2xl sm:text-3xl text-cyan-300 tracking-wider inline-flex min-w-full justify-end px-1">
+                                    {formula ? (
+                                        formula
+                                    ) : (
+                                        <span className="text-gray-600 font-mono font-bold tracking-normal text-xl sm:text-2xl">
+                                            0 <span className="text-[11px] font-sans text-gray-500 font-normal ml-1">(Chờ bấm số...)</span>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Bóc tách kết quả trực tiếp */}
-                        <div className="pt-1.5 border-t border-white/10 flex items-center justify-between px-0.5">
-                            <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2">
+                        {/* Bóc tách kết quả trực tiếp - Cố định sẵn 1 dòng không bao giờ thụt thò hay nhảy vị trí */}
+                        <div className="pt-1.5 border-t border-white/10 flex items-center justify-between px-0.5 min-h-[38px] h-[38px]">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2 h-6">
                                 <span className="bg-cyan-950/90 text-cyan-300 border border-cyan-600/50 px-2 py-0.5 rounded-lg text-xs font-black font-mono shadow-xs shrink-0">
-                                    📦 {parsedResult.totalQty} món
+                                    📦 {parsedResult.totalQty || 0} món
                                 </span>
-                                {parsedResult.items.length > 1 && (
-                                    <div className="text-[10px] text-gray-400 overflow-x-auto whitespace-nowrap hide-scrollbar font-mono flex-1 min-w-0">
-                                        ({parsedResult.items.map(it => `${it.quantity}x${it.unitPrice}k`).join('+')})
-                                    </div>
-                                )}
+                                <div className="text-[10px] text-gray-400 overflow-x-auto whitespace-nowrap hide-scrollbar font-mono flex-1 min-w-0">
+                                    {parsedResult.items.length > 1
+                                        ? `(${parsedResult.items.map(it => `${it.quantity}x${it.unitPrice}k`).join('+')})`
+                                        : parsedResult.items.length === 1
+                                            ? `(${parsedResult.items[0].quantity} cái × ${parsedResult.items[0].unitPrice}k)`
+                                            : <span className="text-gray-500 italic">(Chưa có phép tính)</span>
+                                    }
+                                </div>
                             </div>
 
-                            <div className="text-right shrink-0">
-                                <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono leading-none">
-                                    = {parsedResult.grandTotalK}k
+                            <div className="text-right shrink-0 h-6 flex flex-col justify-center">
+                                <div className="text-base sm:text-lg font-black text-emerald-400 font-mono leading-none">
+                                    = {parsedResult.grandTotalK || 0}k
                                 </div>
-                                <div className="text-[9.5px] font-bold text-orange-300 mt-0.5">
-                                    ≈ {(parsedResult.grandTotalK * 1000).toLocaleString('vi-VN')} đ
+                                <div className="text-[9px] font-bold text-orange-300 leading-none mt-0.5">
+                                    ≈ {((parsedResult.grandTotalK || 0) * 1000).toLocaleString('vi-VN')} đ
                                 </div>
                             </div>
                         </div>
 
                         {/* Chi tiết từng món bóc tách - Luôn chừa sẵn dòng cố định chống nhảy giao diện làm bấm nhầm nút Xoá */}
-                        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar pt-1 min-h-[30px] h-[30px]">
+                        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar pt-1 min-h-[32px] h-[32px]">
                             {parsedResult.items.length > 0 ? (
                                 parsedResult.items.map((it, idx) => (
                                     <div
@@ -459,9 +468,9 @@ export function ItemCalculatorModal({
                                     </div>
                                 ))
                             ) : (
-                                <div className="border border-dashed border-cyan-500/25 bg-cyan-950/20 rounded-lg px-2 py-1 flex items-center gap-1.5 text-[10.5px] font-mono text-cyan-400/40 select-none w-full h-[26px] shrink-0">
-                                    <span className="text-cyan-500/50 font-bold">#1</span>
-                                    <span className="text-gray-400/60 font-medium">1 cái × _k = _k (Nhập số tiền hoặc phép tính...)</span>
+                                <div className="border border-dashed border-cyan-500/25 bg-cyan-950/20 rounded-lg px-2.5 py-1 flex items-center gap-1.5 text-[10.5px] font-mono text-cyan-400/50 select-none w-full h-[26px] shrink-0">
+                                    <span className="text-cyan-400/70 font-bold">#1</span>
+                                    <span className="text-gray-400/70 font-medium">1 cái × _k = _k (Dòng chừa sẵn khi mở bảng tính)</span>
                                 </div>
                             )}
                         </div>

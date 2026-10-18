@@ -51,6 +51,7 @@ import {
   getRecentSearchPrices,
   getRecentClosedPrices,
   removeVietnameseAccents,
+  isPhuShipItem,
 } from "../lib/core";
 import { CustomerAvatar, ThapChamIcon, GheLayBadge } from "./UserAvatar";
 import { openPancakeApp, parsePancakeContact } from "../lib/pancakeDeepLink";
@@ -64,8 +65,13 @@ import {
   parseOrderTimestamp,
   toStartOfDay,
   getCustomerActivePastItems,
+  pushCustomerOrderToPancake,
+  parsePancakeUrlIds,
+  isShopPhone,
 } from "../lib/pancakeSync";
 import { PancakeOrderPushModal } from "./PancakeOrderPushModal";
+import { BillPreviewModal } from "./BillPreviewModal";
+import { QuickOrderPushModal } from "./QuickOrderPushModal";
 import {
   BarChart,
   Bar,
@@ -3702,7 +3708,7 @@ export function ListModal({
         />
       )}
       {pushModalTarget && (
-        <PancakeOrderPushModal
+        <QuickOrderPushModal
           isOpen={true}
           user={pushModalTarget.user}
           platform={pushModalTarget.platform}
@@ -5212,8 +5218,8 @@ export function ProfileModal({
     }
   });
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
-  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [showBillPreview, setShowBillPreview] = useState(false);
   const [editingPriceQty, setEditingPriceQty] =
     useState<EditingPriceQtyTarget | null>(null);
   const [profileContextMenu, setProfileContextMenu] = useState<{
@@ -5269,7 +5275,7 @@ export function ProfileModal({
   };
 
   const isChildOpen = Boolean(
-    isCalculatorOpen || isPushModalOpen || editingPriceQty || profileContextMenu,
+    isCalculatorOpen || editingPriceQty || profileContextMenu || showBillPreview,
   );
   const { modalStyle, touchHandlers } = useSwipeToDismiss({
     onClose,
@@ -5286,6 +5292,241 @@ export function ProfileModal({
       (sum, i) => sum + (cust?.pastItems?.[i]?.price || 0),
       0,
     );
+
+  // Phí ship & Tiền cọc trực tiếp tại hóa đơn đẩy đơn (Yêu cầu: Thêm ship và trừ cọc, bấm xác nhận là đẩy luôn)
+  const isGheLayCust = isCustomerGheLay(
+    store[platform].gheLayTags,
+    cleanUser,
+    store[platform].tags,
+  );
+  const isNtCust = isCustomerNinhThuan(store[platform].ninhThuanTags, cleanUser);
+
+  const [directShippingFee, setDirectShippingFee] = useState<number>(() => {
+    if (isGheLayCust) return 0;
+    if (isNtCust) return 15000;
+    return 20000;
+  });
+
+  const [directPrepaidAmount, setDirectPrepaidAmount] = useState<number>(() => {
+    const custTag = store[platform]?.tags?.[cleanUser];
+    if (custTag === "COC") return 50000;
+    if (custTag === "COC_100") return 100000;
+    return 0;
+  });
+
+  const [isDirectPushing, setIsDirectPushing] = useState(false);
+  const [directPushError, setDirectPushError] = useState<string | null>(null);
+  const [directPushSuccess, setDirectPushSuccess] = useState<string | null>(null);
+
+  // Tự động cập nhật phí ship theo tag khách hàng (0đ Ghé lấy, 15k Ninh Thuận, 20k Toàn quốc)
+  useEffect(() => {
+    if (isGheLayCust) {
+      setDirectShippingFee(0);
+    } else if (isNtCust) {
+      setDirectShippingFee(15000);
+    } else {
+      setDirectShippingFee(20000);
+    }
+  }, [isGheLayCust, isNtCust]);
+
+  // Tự động nhận diện tiền cọc từ tag khách hàng
+  useEffect(() => {
+    const custTag = store[platform]?.tags?.[cleanUser];
+    if (custTag === "COC") {
+      setDirectPrepaidAmount(50000);
+    } else if (custTag === "COC_100") {
+      setDirectPrepaidAmount(100000);
+    }
+  }, [store[platform]?.tags?.[cleanUser]]);
+
+  // Hàm đẩy đơn trực tiếp từ hóa đơn xác nhận - không cần chuyển sang trang khác
+  const handleDirectPushOrder = async () => {
+    if (totalSelectedCount === 0 || isDirectPushing) return;
+    setIsDirectPushing(true);
+    setDirectPushError(null);
+    setDirectPushSuccess(null);
+
+    try {
+      const selectedCurrentItemsWithIdx = Array.from(selectedCurrent)
+        .sort((a, b) => a - b)
+        .map((i) => ({ item: cust?.items?.[i], idx: i, isPast: false }))
+        .filter((x) => Boolean(x.item));
+
+      const selectedPastItemsWithIdx = Array.from(selectedPast)
+        .sort((a, b) => a - b)
+        .map((i) => ({ item: cust?.pastItems?.[i], idx: i, isPast: true }))
+        .filter((x) => Boolean(x.item));
+
+      const allSelectedList = [
+        ...selectedCurrentItemsWithIdx,
+        ...selectedPastItemsWithIdx,
+      ];
+
+      const mainSelectedList = allSelectedList.filter(({ item }) => !isPhuShipItem(item.content));
+      const totalMainQty = mainSelectedList.reduce((sum, { item }) => sum + (item.quantity || 1), 0);
+      const isSingleItemOrder = totalMainQty === 1 && directShippingFee > 0;
+
+      const baseItemsPayload = mainSelectedList.map(({ item, isPast }) => {
+        const itemUnitPrice =
+          item.unitPrice ||
+          (item.quantity && item.price
+            ? Math.round(item.price / item.quantity)
+            : item.price);
+        const itemQty = item.quantity || 1;
+        const itemTotalK = item.price || itemUnitPrice * itemQty;
+
+        const sourceComment = item.sourceCommentId
+          ? store[platform].comments?.find((c) => c.id === item.sourceCommentId)
+          : null;
+        const sourceCommentStr = sourceComment
+          ? typeof sourceComment.content === "object"
+            ? JSON.stringify(sourceComment.content)
+            : String(sourceComment.content || "")
+          : "";
+        const rawContent =
+          item.content && !item.content.includes("(Không ghi chú)")
+            ? item.content.trim()
+            : "";
+        const fullCommentContent =
+          sourceCommentStr || rawContent || `Sản phẩm ${itemUnitPrice}k`;
+
+        return {
+          id: item.id,
+          content: fullCommentContent,
+          price: itemTotalK,
+          unitPrice: itemUnitPrice,
+          quantity: itemQty,
+          isPast: isPast,
+        };
+      });
+
+      const itemsPayload = isSingleItemOrder
+        ? [
+            ...baseItemsPayload,
+            {
+              id: `phu_ship_${Date.now()}`,
+              content: "Phụ ship 5k",
+              price: 5,
+              unitPrice: 5,
+              quantity: 1,
+              isPast: false,
+            },
+          ]
+        : baseItemsPayload;
+
+      const pLink = (
+        pancakeInput.trim() ||
+        store[platform].pancakeLinks?.[cleanUser] ||
+        ""
+      ).trim();
+      const currentCustTag = store[platform].tags?.[cleanUser];
+      const activeInsight = insight || getCustomerInsight(cleanUser);
+      const parsed = parsePancakeUrlIds(pLink);
+      const pId =
+        activeInsight?.pancakePageId ||
+        parsed.pageId ||
+        (pLink.includes("pzl") ? "pzl_2007152536191688636" : undefined);
+      const cId =
+        activeInsight?.pancakeConvId ||
+        parsed.convId ||
+        (pLink.startsWith("pzl_") ? pLink : undefined);
+
+      const res = await pushCustomerOrderToPancake({
+        platform,
+        user: cleanUser,
+        nickname,
+        pancakeLink: pLink,
+        items: itemsPayload,
+        shippingFee: directShippingFee,
+        prepaid: directPrepaidAmount,
+        tag: currentCustTag,
+        isGheLay: isGheLayCust,
+        isNinhThuan: directShippingFee === 15000 || isNtCust,
+        ninhThuanTag: isNtCust,
+        customCustomerInfo: {
+          name:
+            activeInsight?.matchedName ||
+            activeInsight?.latestOrder?.billFullName ||
+            undefined,
+          phone:
+            activeInsight?.matchedPhone ||
+            activeInsight?.latestOrder?.billPhoneNumber ||
+            (isShopPhone(pLink) ? undefined : pLink) ||
+            undefined,
+          address:
+            activeInsight?.matchedAddress ||
+            activeInsight?.latestOrder?.billAddress ||
+            undefined,
+          pageId: pId,
+          conversationId: cId,
+        },
+        sendNotificationMessage: true,
+      });
+
+      if (!res.success) {
+        setDirectPushError(
+          res.error ||
+            "Không thể đẩy đơn lên Pancake lúc này. Vui lòng kiểm tra kết nối!",
+        );
+        setIsDirectPushing(false);
+        return;
+      }
+
+      const orderNum = res.order?.order_number
+        ? String(res.order.order_number)
+        : res.order?.id
+          ? String(res.order.id)
+          : "";
+      setDirectPushSuccess(
+        `✅ Đã đẩy đơn #${orderNum || ""} lên Pancake POS thành công!`,
+      );
+
+      // Tự động gỡ tag cọc nếu có
+      if (currentCustTag === "COC" || currentCustTag === "COC_100") {
+        store.setCustomerTag(platform, cleanUser, "NORMAL");
+      }
+
+      // Lưu lịch sử đẩy đơn
+      const pushedItemsToRecord: OrderItem[] = itemsPayload.map((it, idx) => ({
+        id: it.id || `pushed_${Date.now()}_${idx}`,
+        content: it.content,
+        price: it.price,
+        unitPrice: it.unitPrice,
+        quantity: it.quantity,
+        sourceCommentId: null,
+        createdAt: Date.now(),
+      }));
+
+      const isPushingAll =
+        selectedCurrent.size >= (cust?.items?.length || 0) &&
+        selectedPast.size >= (cust?.pastItems?.length || 0);
+
+      store.recordPushOrderHistory(platform, cleanUser, {
+        orderNumber: orderNum,
+        pancakeOrderId: res.order?.id ? String(res.order.id) : undefined,
+        items: pushedItemsToRecord,
+        shippingFee: directShippingFee,
+        prepaid: directPrepaidAmount,
+        clearAllCart: isPushingAll,
+        pushedCurrentIndices: Array.from(selectedCurrent),
+        pushedPastIndices: Array.from(selectedPast),
+      });
+
+      // Bỏ chọn các món đã đẩy
+      setSelectedCurrent(new Set());
+      setSelectedPast(new Set());
+
+      // Kích hoạt đồng bộ Pancake lại
+      if (pLink) {
+        triggerPancakeSync(pLink);
+      }
+    } catch (err: any) {
+      console.error("Lỗi khi trực tiếp đẩy đơn:", err);
+      setDirectPushError(err?.message || "Lỗi khi đẩy đơn vào Pancake POS.");
+    } finally {
+      setIsDirectPushing(false);
+    }
+  };
 
   const triggerPancakeSync = async (linkVal: string) => {
     const clean = linkVal.trim();
@@ -7591,7 +7832,6 @@ export function ProfileModal({
                                   (currentCust?.items || []).map((_, i) => i),
                                 ),
                               );
-                              setIsPushModalOpen(true);
                             }}
                             title="Mở giao diện đẩy đơn để chọn thêm món mới và đẩy tiếp cho khách"
                             className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-md"
@@ -7640,22 +7880,6 @@ export function ProfileModal({
             />
           )}
 
-          {/* Pancake Order Push Modal */}
-          <PancakeOrderPushModal
-            isOpen={isPushModalOpen}
-            user={cleanUser}
-            platform={platform}
-            selectedCurrentIndices={
-              selectedCurrent.size > 0
-                ? selectedCurrent
-                : new Set((cust?.items || []).map((_, i) => i))
-            }
-            selectedPastIndices={selectedPast}
-            onClose={() => setIsPushModalOpen(false)}
-            onSuccess={(created) => {
-              // Refresh data or clear
-            }}
-          />
 
           {/* Quick Price x Qty Edit Modal */}
           {editingPriceQty && (
@@ -7884,200 +8108,216 @@ export function ProfileModal({
 
           return (
             <div className="shrink-0 z-30 bg-[#0c131d] border-t-2 border-orange-500/50 shadow-[0_-12px_30px_rgba(0,0,0,0.85)] animate-fadeIn">
-              {/* Receipt Header Banner */}
-              <div className="bg-gradient-to-r from-orange-950/80 via-[#1c293c] to-orange-950/80 px-3.5 py-2 border-b border-white/10 flex items-center justify-between">
+              {/* 🚚 & 💧 CỤM ĐIỀU CHỈNH TIỀN SHIP VÀ - TIỀN CỌC TRỰC TIẾP TẠI BILL */}
+              <div className="bg-[#0b121c] border-b border-white/5 px-3 py-2 space-y-1.5">
+                {/* 1. Tiền Ship */}
                 <div className="flex items-center gap-2">
-                  <span className="text-base">🧾</span>
-                  <div>
-                    <div className="text-xs font-black text-orange-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>HÓA ĐƠN CHỌN ĐẨY ĐƠN</span>
-                      <span className="bg-orange-500/25 text-orange-300 border border-orange-500/40 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold">
-                        {totalQty} MÓN
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-gray-400">
-                      Khách: <strong className="text-white">@{cleanUser}</strong> {nickname ? `(${nickname})` : ''}
-                    </div>
+                  <span className="text-sm">🚚</span>
+                  <span className="text-xs font-bold text-gray-300 shrink-0">Tiền ship:</span>
+                  <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar flex-1">
+                    {[
+                      { label: "Ghé lấy", val: 0 },
+                      { label: "Ninh Thuận", val: 15000 },
+                      { label: "Toàn quốc", val: 20000 },
+                    ].map((s) => (
+                      <button
+                        key={s.val}
+                        type="button"
+                        onClick={() => setDirectShippingFee(s.val)}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
+                          directShippingFee === s.val
+                            ? "bg-blue-600 border-blue-400 text-white shadow-xs"
+                            : "bg-[#141e2c] border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* 2. Tiền Cọc */}
+                <div className="flex items-center gap-2 pt-1.5 border-t border-white/5">
+                  <span className="text-sm">💧</span>
+                  <span className="text-xs font-bold text-gray-300 shrink-0">- Cọc:</span>
+                  <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar flex-1">
+                    {[
+                      { label: "0đ", val: 0 },
+                      { label: "-50k", val: 50000 },
+                      { label: "-100k", val: 100000 },
+                      { label: "-200k", val: 200000 },
+                    ].map((c) => (
+                      <button
+                        key={c.val}
+                        type="button"
+                        onClick={() => setDirectPrepaidAmount(c.val)}
+                        className={`px-2 py-0.8 rounded-lg text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
+                          directPrepaidAmount === c.val
+                            ? "bg-cyan-600 border-cyan-400 text-white shadow-xs"
+                            : "bg-[#141e2c] border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Thông báo lỗi hoặc thành công khi đẩy đơn */}
+              {directPushError && (
+                <div className="px-3.5 py-1.5 bg-red-950/80 border-b border-red-500/40 text-red-200 text-xs flex items-center justify-between gap-2">
+                  <span className="truncate">⚠️ {directPushError}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedCurrent(new Set());
-                      setSelectedPast(new Set());
-                    }}
-                    title="Bỏ chọn tất cả các món"
-                    className="text-[11px] font-bold text-gray-400 hover:text-red-300 bg-white/5 hover:bg-red-950/40 px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 transition-all cursor-pointer active:scale-95"
+                    onClick={() => setDirectPushError(null)}
+                    className="text-red-400 hover:text-white text-xs font-bold px-1.5 py-0.5"
                   >
-                    ✕ Bỏ chọn
+                    ✕
                   </button>
                 </div>
-              </div>
+              )}
+              {directPushSuccess && (
+                <div className="px-3.5 py-1.5 bg-emerald-950/90 border-b border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-2">
+                  <span className="font-bold truncate">{directPushSuccess}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDirectPushSuccess(null)}
+                    className="text-emerald-400 hover:text-white text-xs font-bold px-1.5 py-0.5"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
-              {/* Bill Items List (Kiểu Bill cuộn gọn) */}
-              <div className="max-h-48 overflow-y-auto px-3.5 py-2.5 space-y-1.5 bg-[#090e15] divide-y divide-white/5">
-                {allSelectedList.map(({ item, idx, isPast }, sIdx) => {
-                  const itemUnitPrice =
-                    item.unitPrice ||
-                    (item.quantity && item.price
-                      ? Math.round(item.price / item.quantity)
-                      : item.price);
-                  const itemQty = item.quantity || 1;
-                  const itemTotalK = item.price || itemUnitPrice * itemQty;
-                  const itemTotalVnd = itemTotalK * 1000;
-                  const itemUnitPriceVnd = itemUnitPrice * 1000;
+              {/* 🌟 Card Tổng Cộng Chuẩn Bill (Tự động phụ ship +5k khi đi đơn 1 cái) */}
+              {(() => {
+                const mainItems = allSelectedList.filter(({ item }) => !isPhuShipItem(item.content));
+                const totalMainQty = mainItems.reduce((sum, { item }) => sum + (item.quantity || 1), 0);
+                const mainTotalK = mainItems.reduce((sum, { item }) => sum + (item.price || 0), 0);
+                const mainTotalVnd = mainTotalK * 1000;
+                const isSingleItemOrder = totalMainQty === 1 && directShippingFee > 0;
+                const phuShipVnd = isSingleItemOrder ? 5000 : 0;
+                const finalCodVnd = Math.max(
+                  0,
+                  mainTotalVnd + phuShipVnd + directShippingFee - directPrepaidAmount,
+                );
 
-                  const sourceComment = item.sourceCommentId
-                    ? store[platform].comments?.find((c) => c.id === item.sourceCommentId)
-                    : null;
-                  const sourceCommentStr = sourceComment
-                    ? typeof sourceComment.content === "object"
-                      ? JSON.stringify(sourceComment.content)
-                      : String(sourceComment.content || "")
-                    : "";
-                  const rawContent =
-                    item.content && !item.content.includes("(Không ghi chú)")
-                      ? item.content.trim()
-                      : "";
-                  const fullCommentContent =
-                    sourceCommentStr || rawContent || `Sản phẩm ${itemUnitPrice}k`;
-
-                  return (
-                    <div
-                      key={`bill-item-${isPast ? 'past' : 'curr'}-${idx}`}
-                      className="flex items-center justify-between gap-2 pt-1.5 first:pt-0 text-xs"
-                    >
-                      {/* Trái: STT + Tên món + SL x Đơn giá */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-gray-500 text-[11px] font-bold">
-                            {sIdx + 1}.
+                return (
+                  <div className="bg-gradient-to-r from-[#0a121d] via-[#111e30] to-[#0a121d] border-t border-emerald-500/40 p-2.5 sm:px-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase font-mono flex items-center gap-1 flex-wrap">
+                        <span>SL: {totalMainQty} CÁI</span>
+                        <span>•</span>
+                        <span>HÀNG: {mainTotalVnd.toLocaleString("vi-VN")}đ</span>
+                        {isSingleItemOrder && (
+                          <span className="text-amber-300 font-bold">
+                            • PHỤ SHIP: +5.000đ
                           </span>
-                          <span className="font-bold text-gray-200 truncate">
-                            {fullCommentContent}
+                        )}
+                        {directShippingFee > 0 && (
+                          <span className="text-blue-300">
+                            • SHIP: +{directShippingFee.toLocaleString("vi-VN")}đ
                           </span>
-                          {isPast && (
-                            <span className="text-[9px] bg-amber-950/70 text-amber-300 border border-amber-500/30 px-1 rounded font-bold shrink-0">
-                              Cũ
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-gray-400 font-mono pl-4 mt-0.5">
-                          <span>{itemQty} x {itemUnitPriceVnd.toLocaleString('vi-VN')}đ</span>
-                          <span className="text-gray-500 text-[10px] font-sans ml-1">
-                            ({itemUnitPrice}k/cái)
+                        )}
+                        {directPrepaidAmount > 0 && (
+                          <span className="text-amber-300">
+                            • CỌC: -{directPrepaidAmount.toLocaleString("vi-VN")}đ
                           </span>
-                        </div>
+                        )}
                       </div>
-
-                      {/* Phải: Thành tiền to đậm & Nút bỏ chọn món này */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-right">
-                          <span className="font-black font-mono text-emerald-400 text-sm">
-                            {itemTotalVnd.toLocaleString('vi-VN')}
-                          </span>
-                          <span className="text-[10px] text-emerald-400 font-bold ml-0.5">đ</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (isPast) {
-                              const nextSet = new Set(selectedPast);
-                              nextSet.delete(idx);
-                              setSelectedPast(nextSet);
-                            } else {
-                              const nextSet = new Set(selectedCurrent);
-                              nextSet.delete(idx);
-                              setSelectedCurrent(nextSet);
-                            }
-                          }}
-                          className="text-gray-500 hover:text-red-400 p-1 hover:bg-white/5 rounded transition-colors cursor-pointer"
-                          title="Bỏ món này ra khỏi hóa đơn đẩy"
-                        >
-                          ✕
-                        </button>
+                      <div className="text-sm sm:text-base font-black text-emerald-300 tracking-wide uppercase mt-0.5 flex items-center gap-1.5">
+                        <span>THU HỘ (COD):</span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* 🌟 Card Tổng Cộng Chuẩn Bill (SL: X CÁI | TỔNG CỘNG | xxx.000 đ) */}
-              <div className="bg-gradient-to-r from-[#0a121d] via-[#111e30] to-[#0a121d] border-t-2 border-emerald-500/40 p-3 sm:px-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs sm:text-sm font-black text-gray-400 tracking-wider uppercase font-mono">
-                    SL: {totalQty} CÁI
+                    <div className="text-right flex items-center gap-2">
+                      <div>
+                        <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tracking-tight">
+                          {finalCodVnd.toLocaleString("vi-VN")}
+                        </span>
+                        <span className="text-emerald-400 font-bold text-xs sm:text-sm ml-0.5">đ</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCurrent(new Set());
+                          setSelectedPast(new Set());
+                        }}
+                        title="Bỏ chọn tất cả"
+                        className="text-[10px] text-gray-400 hover:text-red-300 p-1 hover:bg-white/5 rounded transition-colors cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-base sm:text-xl font-black text-white tracking-wide uppercase mt-0.5">
-                    TỔNG CỘNG
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
-                    {totalVnd.toLocaleString('vi-VN')}
-                  </span>
-                  <span className="text-emerald-400 font-bold text-base ml-1">đ</span>
-                </div>
-              </div>
+                );
+              })()}
 
-              {/* Action Buttons: ĐẨY ĐƠN PANCAKE & IN BILL */}
-              <div className="p-3 bg-[#131d2b] border-t border-white/10 flex items-center gap-2">
+              {/* Action Buttons: ĐẨY ĐƠN TRỰC TIẾP & XEM BILL */}
+              <div className="p-2.5 bg-[#131d2b] border-t border-white/10 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsPushModalOpen(true)}
-                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-orange-600 via-amber-600 to-orange-700 hover:from-orange-500 hover:to-amber-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-orange-950/60 active:scale-98 transition-all cursor-pointer"
+                  onClick={handleDirectPushOrder}
+                  disabled={isDirectPushing}
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-orange-600 via-amber-600 to-orange-700 hover:from-orange-500 hover:to-amber-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-orange-950/60 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="text-base">🚀</span>
-                  <span>XÁC NHẬN ĐẨY ĐƠN ({totalSelectedCount} MÓN)</span>
-                  {totalSelectedCount === 1 && (
-                    <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono font-bold text-amber-200">
-                      + Phụ ship 5k
-                    </span>
+                  {isDirectPushing ? (
+                    <>
+                      <span className="animate-spin text-base">⏳</span>
+                      <span>ĐANG ĐẨY ĐƠN SANG PANCAKE POS...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base">🚀</span>
+                      <span>XÁC NHẬN ĐẨY ĐƠN ({totalSelectedCount} MÓN)</span>
+                    </>
                   )}
                 </button>
 
+                {/* Sửa nút IN BILL thành XEM BILL theo yêu cầu */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const currentItemsToPrint = Array.from(selectedCurrent)
-                      .sort((a, b) => a - b)
-                      .map((i) => cust.items[i]);
-                    const pastItemsToPrint = Array.from(selectedPast)
-                      .sort((a, b) => a - b)
-                      .map((i) => cust.pastItems![i]);
-                    const allItemsToPrint = [
-                      ...currentItemsToPrint,
-                      ...pastItemsToPrint,
-                    ];
-                    const total = allItemsToPrint.reduce(
-                      (sum, item) => sum + (item.price || 0),
-                      0,
-                    );
-                    const time = new Date().toLocaleTimeString("vi-VN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    });
-                    const displayName = store[platform].nicknames?.[cleanUser]
-                      ? `(${store[platform].nicknames[cleanUser]}) ${cleanUser}`
-                      : `#${getShortId(cleanUser)} ${cleanUser}`;
-                    printBill(
-                      displayName,
-                      allItemsToPrint,
-                      total,
-                      PLATFORMS[platform].label,
-                      time,
-                      isCustomerGheLay(store[platform].gheLayTags, cleanUser, store[platform].tags)
-                    );
-                  }}
-                  className="py-3 px-4 rounded-xl bg-[#233246] hover:bg-[#2c3e56] text-blue-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-blue-500/30 active:scale-98 transition-all cursor-pointer shrink-0"
-                  title="In hóa đơn/bill tính tiền các món đã chọn"
+                  onClick={() => setShowBillPreview(true)}
+                  className="py-3 px-4 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-black text-xs flex items-center justify-center gap-1.5 border border-blue-400/40 active:scale-95 transition-all cursor-pointer shadow-md shrink-0"
+                  title="Xem trước hóa đơn (có tiền ship, cọc và nút in bill)"
                 >
-                  <span>🖨️</span>
-                  <span>IN BILL</span>
+                  <span>🧾</span>
+                  <span>XEM BILL</span>
                 </button>
               </div>
+
+              {/* Bill Preview Modal (Ảnh Bill gồm Ship + Cọc + Nút In) */}
+              {showBillPreview && (() => {
+                const mainItems = allSelectedList.filter(({ item }) => !isPhuShipItem(item.content));
+                const totalMainQty = mainItems.reduce((sum, { item }) => sum + (item.quantity || 1), 0);
+                const isSingleItemOrder = totalMainQty === 1 && directShippingFee > 0;
+                const billItems = mainItems.map(({ item }) => ({
+                  id: item.id,
+                  content: item.content || `Sản phẩm ${item.price}k`,
+                  price: item.price || 0,
+                  unitPrice: item.unitPrice,
+                  quantity: item.quantity || 1,
+                }));
+                if (isSingleItemOrder) {
+                  billItems.push({
+                    id: "phu_ship_5k",
+                    content: "Phụ ship 5k",
+                    price: 5,
+                    unitPrice: 5,
+                    quantity: 1,
+                  });
+                }
+                return (
+                  <BillPreviewModal
+                    user={cleanUser}
+                    platform={platform}
+                    items={billItems}
+                    shippingFee={directShippingFee}
+                    prepaid={directPrepaidAmount}
+                    onClose={() => setShowBillPreview(false)}
+                  />
+                );
+              })()}
             </div>
           );
         })()}

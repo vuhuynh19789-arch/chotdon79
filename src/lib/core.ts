@@ -661,7 +661,9 @@ export function printBill(
     total: number, 
     platformLabel: string, 
     time: string,
-    isGheLayParam?: boolean
+    isGheLayParam?: boolean,
+    shippingFee?: number,
+    prepaid?: number
 ) {
     try {
         const isGl = isGheLayParam !== undefined ? Boolean(isGheLayParam) : checkCustomerIsGheLay(user);
@@ -698,7 +700,8 @@ export function printBill(
             return { wrapped, price: item.price };
         });
 
-        let totalSectionHeight = 140;
+        const hasFeeOrDeposit = (shippingFee !== undefined && shippingFee > 0) || (prepaid !== undefined && prepaid > 0);
+        let totalSectionHeight = hasFeeOrDeposit ? 230 : 140;
         
         canvas.height = headerHeight + userHeight + 20 + itemsHeight + 20 + totalSectionHeight + 20;
 
@@ -784,17 +787,54 @@ export function printBill(
         ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(10, y); ctx.lineTo(w - 10, y); ctx.stroke(); 
         y += 45;
 
-        // Total
-        ctx.textAlign = "left"; ctx.font = "bold 50px Arial";
-        ctx.fillText("TỔNG CỘNG", 10, y + 35);
-        
-        ctx.font = "bold 35px Arial";
-        ctx.fillStyle = "#444";
-        ctx.fillText(`SL: ${items.length} MÓN`, 10, y + 85);
-        
-        ctx.fillStyle = "#000";
-        ctx.textAlign = "right"; ctx.font = "900 70px Arial";
-        ctx.fillText(`${total}.000đ`, w - 10, y + 70);
+        // Total Section
+        const itemsTotalVnd = total * 1000;
+        const fee = shippingFee || 0;
+        const prep = prepaid || 0;
+        const codVnd = Math.max(0, itemsTotalVnd + fee - prep);
+
+        if (hasFeeOrDeposit) {
+            ctx.textAlign = "left"; ctx.font = "bold 32px Arial";
+            ctx.fillText(`Tiền hàng (${items.length} món):`, 10, y + 15);
+            ctx.textAlign = "right"; ctx.font = "bold 32px Arial";
+            ctx.fillText(`${itemsTotalVnd.toLocaleString('vi-VN')}đ`, w - 10, y + 15);
+            y += 40;
+
+            if (fee > 0) {
+                ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
+                ctx.fillText(`Phí ship:`, 10, y + 15);
+                ctx.textAlign = "right"; ctx.font = "bold 30px Arial";
+                ctx.fillText(`+${fee.toLocaleString('vi-VN')}đ`, w - 10, y + 15);
+                y += 38;
+            }
+
+            if (prep > 0) {
+                ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
+                ctx.fillText(`Đã cọc:`, 10, y + 15);
+                ctx.textAlign = "right"; ctx.font = "bold 30px Arial";
+                ctx.fillText(`-${prep.toLocaleString('vi-VN')}đ`, w - 10, y + 15);
+                y += 38;
+            }
+
+            ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(10, y + 5); ctx.lineTo(w - 10, y + 5); ctx.stroke();
+            y += 25;
+
+            ctx.textAlign = "left"; ctx.font = "bold 45px Arial";
+            ctx.fillText("THU HỘ (COD)", 10, y + 35);
+            ctx.textAlign = "right"; ctx.font = "900 65px Arial";
+            ctx.fillText(`${codVnd.toLocaleString('vi-VN')}đ`, w - 10, y + 35);
+        } else {
+            ctx.textAlign = "left"; ctx.font = "bold 50px Arial";
+            ctx.fillText("TỔNG CỘNG", 10, y + 35);
+            
+            ctx.font = "bold 35px Arial";
+            ctx.fillStyle = "#444";
+            ctx.fillText(`SL: ${items.length} MÓN`, 10, y + 85);
+            
+            ctx.fillStyle = "#000";
+            ctx.textAlign = "right"; ctx.font = "900 70px Arial";
+            ctx.fillText(`${total}.000đ`, w - 10, y + 70);
+        }
 
         executePrint(canvas, platformLabel);
     } catch (e) {
@@ -865,4 +905,10 @@ export async function pushPrintJobToFirebase(platformLabel: string, b64: string)
     } catch (e) {
         console.error("Push print job failed", e);
     }
+}
+
+export function isPhuShipItem(content?: string): boolean {
+    if (!content) return false;
+    const c = content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    return c.includes("phu ship") || c.includes("phu thu ship");
 }
