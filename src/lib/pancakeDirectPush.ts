@@ -209,13 +209,30 @@ export async function pushOrderDirectlyFromBrowser(
   );
   const orderSources = isZalo ? "-8" : "-1";
 
+  // Chuẩn hóa fbFormattedId (bắt buộc đúng cấu trúc cho Pancake POS)
+  let fbFormattedId: string | undefined = undefined;
+  if (isZalo) {
+    if (finalConvId && finalConvId.startsWith('pzl_u_')) {
+      const uId = finalConvId.split('_').pop();
+      fbFormattedId = `pzl_u_${uId}`;
+    }
+  } else if (finalConvId && finalConvId.includes('_')) {
+    const parts = finalConvId.split('_');
+    const uId = parts.pop();
+    if (finalPageId && uId) {
+      fbFormattedId = `${finalPageId}_${uId}`;
+    } else if (uId) {
+      fbFormattedId = uId;
+    }
+  }
+
   // 2. Tải danh sách variations
   let shopVariations: any[] = [];
   try {
     shopVariations = await getBrowserShopVariations(shopId, token);
   } catch {}
 
-  const firstActiveVarId = shopVariations[0]?.id || 'bf05b2ef-8d50-4658-9701-63786bd4bc61';
+  const firstActiveVarId = shopVariations[0]?.id || '8e159d88-651c-4de5-a9f2-92f5bc2d9613' || 'bf05b2ef-8d50-4658-9701-63786bd4bc61';
 
   // 3. Xử lý sản phẩm & Barcode 0(giá)
   const posItems: any[] = [];
@@ -304,6 +321,9 @@ export async function pushOrderDirectlyFromBrowser(
     warehouse_id: warehouseId,
     bill_full_name: chosenName,
     bill_phone_number: chosenPhone || undefined,
+    customer_fb_id: fbFormattedId || undefined,
+    fb_id: fbFormattedId || undefined,
+    psid: fbFormattedId || undefined,
     shipping_address: shippingAddr,
     shipping_fee: assignedShippingFee,
     prepaid: assignedPrepaid > 0 ? assignedPrepaid : undefined,
@@ -312,7 +332,9 @@ export async function pushOrderDirectlyFromBrowser(
       name: chosenName,
       phone: chosenPhone || undefined,
       phone_numbers: chosenPhone ? [chosenPhone] : undefined,
-      page_id: finalPageId || undefined
+      page_id: finalPageId || undefined,
+      fb_id: fbFormattedId || undefined,
+      psid: fbFormattedId || undefined
     },
     order: {
       warehouse_id: warehouseId,

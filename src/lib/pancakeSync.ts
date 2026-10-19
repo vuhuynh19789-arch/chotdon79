@@ -1640,20 +1640,23 @@ export async function pushCustomerOrderToPancake(payload: PushOrderPayload): Pro
           data = null;
         }
 
-        const isServerTimeoutOrError = 
-          !res.ok && (
-            res.status === 504 || 
-            res.status === 502 || 
-            res.status === 503 ||
-            resText.includes("FUNCTION_INVOCATION_FAILED") ||
-            resText.includes("GATEWAY_TIMEOUT")
-          );
+        const isServerProxyFailure = 
+          !res.ok || 
+          (data && data.success === false) ||
+          res.status === 404 || 
+          res.status === 504 || 
+          res.status === 502 || 
+          res.status === 503 ||
+          resText.includes("FUNCTION_INVOCATION") ||
+          resText.includes("GATEWAY_TIMEOUT") ||
+          resText.includes("Cannot POST") ||
+          resText.startsWith("<!DOCTYPE");
 
-        if (isServerTimeoutOrError && pushSettings.autoFailoverToClient) {
-          console.warn("⚠️ [Failover] Máy chủ phản hồi chậm hoặc timeout Vercel. Tự động chuyển sang Đẩy trực tiếp từ trình duyệt...");
+        if (isServerProxyFailure && pushSettings.autoFailoverToClient) {
+          console.warn(`⚠️ [Vercel Failover] Máy chủ proxy không xử lý được (status: ${res.status}). Tự động chuyển sang Đẩy trực tiếp từ trình duyệt lên Pancake POS...`);
           result = await pushOrderDirectlyFromBrowser(payload, pushSettings);
           if (result.success) {
-            result.message = `${result.message || 'Đẩy đơn thành công!'} (Tự động chuyển Đẩy trực tiếp do máy chủ chậm)`;
+            result.message = `${result.message || 'Đẩy đơn lên Pancake POS thành công!'}`;
           }
         } else if (!res.ok || (data && !data.success)) {
           const cleanErr = (resText.includes("FUNCTION_INVOCATION_FAILED") || res.status === 504 || res.status === 502)
@@ -1675,12 +1678,12 @@ export async function pushCustomerOrderToPancake(payload: PushOrderPayload): Pro
           };
         }
       } catch (fetchErr: any) {
-        // Nếu fetch bị timeout hoặc lỗi mạng máy chủ và có bật auto failover
+        // Nếu fetch bị lỗi kết nối hoặc timeout và có bật auto failover
         if (pushSettings.autoFailoverToClient) {
-          console.warn("⚠️ [Failover Timeout] Quá thời gian chờ máy chủ. Tự động chuyển sang Đẩy trực tiếp từ trình duyệt...");
+          console.warn("⚠️ [Vercel Failover] Lỗi kết nối máy chủ. Tự động chuyển sang Đẩy trực tiếp từ trình duyệt lên Pancake POS...");
           result = await pushOrderDirectlyFromBrowser(payload, pushSettings);
           if (result.success) {
-            result.message = `${result.message || 'Đẩy đơn thành công!'} (Tự động chuyển Đẩy trực tiếp do máy chủ chậm)`;
+            result.message = `${result.message || 'Đẩy đơn lên Pancake POS thành công!'}`;
           }
         } else {
           result = {

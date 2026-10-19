@@ -7,7 +7,7 @@ export const firebaseApp = initializeApp({
 });
 export const firebaseDb = getDatabase(firebaseApp);
 export const SHOP_NAME = "Hiền Phạm | 0965.286.096";
-export const APP_VERSION = "v3.2.0";
+export const APP_VERSION = "v3.3.0";
 
 export function showAppToast(msg: string) {
     try {
