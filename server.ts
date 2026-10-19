@@ -22,17 +22,6 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(compression());
 app.use(express.json());
 
-// Chuẩn hóa req.url khi chạy trên Vercel Serverless Function
-app.use((req, _res, next) => {
-  if (req.query && req.query.__route) {
-    const rawRoute = Array.isArray(req.query.__route) ? req.query.__route.join('/') : String(req.query.__route);
-    const queryIdx = req.url ? req.url.indexOf('?') : -1;
-    const queryPart = queryIdx !== -1 ? req.url.slice(queryIdx) : '';
-    req.url = `/api/${rawRoute}${queryPart}`;
-  }
-  next();
-});
-
 interface SSEClient {
   id: string;
   res: express.Response;
