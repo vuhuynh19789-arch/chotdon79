@@ -177,7 +177,7 @@ export const QuickOrderPushModal: React.FC<QuickOrderPushModalProps> = ({
       const pId = activeInsight?.pancakePageId || parsed.pageId || (pLink.includes('pzl') ? 'pzl_2007152536191688636' : undefined);
       const cId = activeInsight?.pancakeConvId || parsed.convId || (pLink.startsWith('pzl_') ? pLink : undefined);
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,

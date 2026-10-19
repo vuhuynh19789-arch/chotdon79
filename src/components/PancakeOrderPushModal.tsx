@@ -697,7 +697,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
 
       const currentCustTag = store[platform].tags?.[cleanUser];
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,

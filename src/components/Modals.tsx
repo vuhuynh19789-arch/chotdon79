@@ -5414,7 +5414,7 @@ export function ProfileModal({
         parsed.convId ||
         (pLink.startsWith("pzl_") ? pLink : undefined);
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,
