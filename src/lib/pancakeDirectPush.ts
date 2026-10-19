@@ -180,6 +180,10 @@ export async function pushOrderDirectlyFromBrowser(
       finalConvId = rawLink;
       const m = rawLink.match(/pzl_[ug]_([0-9]+)_/);
       if (m && m[1]) finalPageId = `pzl_${m[1]}`;
+      else finalPageId = 'pzl_2007152536191688636';
+    } else if (rawLink.startsWith('pzl_')) {
+      finalConvId = rawLink;
+      finalPageId = 'pzl_2007152536191688636';
     } else {
       const fbMatch = rawLink.match(/^(?:fb_)?([0-9]{10,})_([0-9]{10,})$/);
       if (fbMatch) {

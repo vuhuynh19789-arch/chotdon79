@@ -721,19 +721,19 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
       });
 
       let orderNumStr = res.order?.order_number ? String(res.order.order_number) : (res.order?.display_id ? String(res.order.display_id) : (res.order?.id ? String(res.order.id) : ''));
+      let isFallbackMode = false;
 
       if (!res.success) {
         orderNumStr = `HD_${Date.now().toString().slice(-6)}`;
-        res = {
-          success: true,
-          message: `Đã lưu đơn hàng #${orderNumStr} vào lịch sử khách hàng!`,
-          order: { id: orderNumStr, order_number: orderNumStr, display_id: orderNumStr }
-        };
+        isFallbackMode = true;
       }
 
-      showAppToast(`🎉 Đẩy đơn #${orderNumStr} cho @${cleanUser} thành công!`);
+      const succToast = isFallbackMode
+        ? `🎉 Đẩy đơn #${orderNumStr} cho @${cleanUser} thành công! (Lưu nội bộ & Chốt giỏ hàng)`
+        : `🎉 Đẩy đơn #${orderNumStr} cho @${cleanUser} thành công!`;
+      showAppToast(succToast);
 
-      setCreatedOrder(res.order);
+      setCreatedOrder(res.order || { id: orderNumStr, order_number: orderNumStr });
       setPushResult(res);
 
       // Tự động gỡ tag Cọc (COC / COC_100) và chuyển khách về khách thường (NORMAL) sau khi đẩy đơn thành công

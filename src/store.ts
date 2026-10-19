@@ -2916,6 +2916,19 @@ const decodeKeys = (obj: any) => {
                 newCusts[user] = updatedCust;
             }
 
+            // Lưu vào kho lưu trữ vĩnh viễn (Master Pushed Orders History) không bao giờ mất
+            try {
+                const masterRaw = localStorage.getItem('slp_pushed_orders_master_history');
+                const masterList = masterRaw ? JSON.parse(masterRaw) : [];
+                const masterRecord = {
+                    ...newRecord,
+                    user,
+                    platform,
+                    nickname: state.nicknames?.[user] || ''
+                };
+                localStorage.setItem('slp_pushed_orders_master_history', JSON.stringify([masterRecord, ...masterList.filter((m: any) => m.id !== newRecord.id)].slice(0, 500)));
+            } catch {}
+
             set(s => ({ 
                 [platform]: { 
                     ...s[platform], 
@@ -3197,11 +3210,13 @@ const decodeKeys = (obj: any) => {
                     });
 
                     newCusts[name] = { 
+                        ...cust,
                         count: 0, 
                         total: 0, 
                         lastTime: now, 
                         items: [],
-                        pastItems: mergedPastItems
+                        pastItems: mergedPastItems,
+                        pushHistory: cust.pushHistory || []
                     };
                     
                     if (newTags[name] === 'COC' || newTags[name] === 'COC_100') {
