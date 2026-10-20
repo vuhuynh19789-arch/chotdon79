@@ -432,7 +432,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
         if (it) {
           const rawContent = (it.content || '').trim();
           const cleanContent = (!rawContent || rawContent === "(Không ghi chú)" || rawContent.toLowerCase().includes("không ghi chú")) ? "" : rawContent;
-          const itemUnitPrice = it.unitPrice || it.price || 0;
+          const itemUnitPrice = it.unitPrice || (it.quantity && it.price ? Math.round(it.price / it.quantity) : it.price) || 0;
           const itemQty = it.quantity || 1;
           initialItems.push({
             id: it.id,
@@ -452,7 +452,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
         if (it) {
           const rawContent = (it.content || '').trim();
           const cleanContent = (!rawContent || rawContent === "(Không ghi chú)" || rawContent.toLowerCase().includes("không ghi chú")) ? "" : rawContent;
-          const itemUnitPrice = it.unitPrice || it.price || 0;
+          const itemUnitPrice = it.unitPrice || (it.quantity && it.price ? Math.round(it.price / it.quantity) : it.price) || 0;
           const itemQty = it.quantity || 1;
           initialItems.push({
             id: it.id,
@@ -677,11 +677,15 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
       const itemsPayload = orderItems.map(it => {
         const rawContent = (it.content || '').trim();
         const cleanContent = (!rawContent || rawContent === "(Không ghi chú)" || rawContent.toLowerCase().includes("không ghi chú")) ? "" : rawContent;
+        const uPrice = it.unitPrice || it.priceK || 0;
+        const qty = it.quantity || 1;
         return {
           id: it.id,
-          content: cleanContent || `Sản phẩm ${it.priceK}k`,
-          price: it.priceK || 0,
-          quantity: it.quantity || 1,
+          content: cleanContent || `Sản phẩm ${uPrice}k`,
+          price: uPrice,
+          unitPrice: uPrice,
+          totalPrice: uPrice * qty,
+          quantity: qty,
           variationId: it.variationId,
           variationName: it.variationName,
           productName: it.productName,
@@ -697,7 +701,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
 
       const currentCustTag = store[platform].tags?.[cleanUser];
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,
@@ -750,7 +754,7 @@ export const PancakeOrderPushModal: React.FC<PancakeOrderPushModalProps> = ({
       const pushedItemsToRecord: OrderItem[] = orderItems.map((it, idx) => ({
         id: it.id || `pushed_${Date.now()}_${idx}`,
         content: it.content || `Sản phẩm ${it.priceK}k`,
-        price: it.priceK || 0,
+        price: (it.unitPrice || it.priceK || 0) * (it.quantity || 1),
         unitPrice: it.unitPrice || it.priceK || 0,
         quantity: it.quantity || 1,
         sourceCommentId: null,

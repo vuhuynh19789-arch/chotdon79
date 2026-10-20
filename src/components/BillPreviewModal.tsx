@@ -42,7 +42,11 @@ export const BillPreviewModal: React.FC<BillPreviewModalProps> = ({
   const [downloading, setDownloading] = useState(false);
   const billPaperRef = useRef<HTMLDivElement>(null);
 
-  const totalItemsK = items.reduce((sum, it) => sum + (it.price || (it.unitPrice || 0) * (it.quantity || 1)), 0);
+  const totalItemsK = items.reduce((sum, it) => {
+    const q = it.quantity || 1;
+    const u = it.unitPrice || (q > 1 && it.price ? Math.round(it.price / q) : it.price) || 0;
+    return sum + (u * q);
+  }, 0);
   const totalItemsVnd = totalItemsK * 1000;
   const mainItems = items.filter(it => !isPhuShipItem(it.content));
   const totalQty = mainItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
@@ -77,7 +81,11 @@ export const BillPreviewModal: React.FC<BillPreviewModalProps> = ({
       });
     }
 
-    const calcItemsK = displayItems.reduce((sum, it) => sum + (it.price || (it.unitPrice || 0) * (it.quantity || 1)), 0);
+    const calcItemsK = displayItems.reduce((sum, it) => {
+      const q = it.quantity || 1;
+      const u = it.unitPrice || (q > 1 && it.price ? Math.round(it.price / q) : it.price) || 0;
+      return sum + (u * q);
+    }, 0);
     const calcItemsVnd = calcItemsK * 1000;
     const calcCodVnd = Math.max(0, calcItemsVnd + shippingFee - prepaid);
 
@@ -152,9 +160,9 @@ export const BillPreviewModal: React.FC<BillPreviewModalProps> = ({
     ctx.fillStyle = '#111827';
     displayItems.forEach((it, idx) => {
       y += 48;
-      const uPrice = it.unitPrice || (it.quantity ? Math.round(it.price / it.quantity) : it.price);
       const q = it.quantity || 1;
-      const tVnd = (it.price || uPrice * q) * 1000;
+      const uPrice = it.unitPrice || (q > 1 && it.price ? Math.round(it.price / q) : it.price) || 0;
+      const tVnd = (uPrice * q) * 1000;
       const cleanName = (it.content && !it.content.includes('(Không ghi chú)')) ? it.content : `Sản phẩm ${uPrice}k`;
 
       ctx.textAlign = 'left';
@@ -371,9 +379,9 @@ export const BillPreviewModal: React.FC<BillPreviewModalProps> = ({
                 <span>SL x GIÁ • T.TIỀN</span>
               </div>
               {items.map((it, idx) => {
-                const uPrice = it.unitPrice || (it.quantity ? Math.round(it.price / it.quantity) : it.price);
                 const q = it.quantity || 1;
-                const tVnd = (it.price || uPrice * q) * 1000;
+                const uPrice = it.unitPrice || (q > 1 && it.price ? Math.round(it.price / q) : it.price) || 0;
+                const tVnd = (uPrice * q) * 1000;
                 const cleanName = (it.content && !it.content.includes('(Không ghi chú)')) ? it.content : `Sản phẩm ${uPrice}k`;
 
                 return (

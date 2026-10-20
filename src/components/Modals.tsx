@@ -5376,8 +5376,9 @@ export function ProfileModal({
         return {
           id: item.id,
           content: fullCommentContent,
-          price: itemTotalK,
+          price: itemUnitPrice,
           unitPrice: itemUnitPrice,
+          totalPrice: itemTotalK,
           quantity: itemQty,
           isPast: isPast,
         };
@@ -5391,6 +5392,7 @@ export function ProfileModal({
               content: "Phụ ship 5k",
               price: 5,
               unitPrice: 5,
+              totalPrice: 5,
               quantity: 1,
               isPast: false,
             },
@@ -5414,7 +5416,7 @@ export function ProfileModal({
         parsed.convId ||
         (pLink.startsWith("pzl_") ? pLink : undefined);
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,
@@ -5476,8 +5478,8 @@ export function ProfileModal({
       const pushedItemsToRecord: OrderItem[] = itemsPayload.map((it, idx) => ({
         id: it.id || `pushed_${Date.now()}_${idx}`,
         content: it.content,
-        price: it.price,
-        unitPrice: it.unitPrice,
+        price: it.totalPrice || ((it.unitPrice || it.price) * (it.quantity || 1)),
+        unitPrice: it.unitPrice || it.price,
         quantity: it.quantity,
         sourceCommentId: null,
         createdAt: Date.now(),
@@ -8280,13 +8282,17 @@ export function ProfileModal({
                 const mainItems = allSelectedList.filter(({ item }) => !isPhuShipItem(item.content));
                 const totalMainQty = mainItems.reduce((sum, { item }) => sum + (item.quantity || 1), 0);
                 const isSingleItemOrder = totalMainQty === 1 && directShippingFee > 0;
-                const billItems = mainItems.map(({ item }) => ({
-                  id: item.id,
-                  content: item.content || `Sản phẩm ${item.price}k`,
-                  price: item.price || 0,
-                  unitPrice: item.unitPrice,
-                  quantity: item.quantity || 1,
-                }));
+                const billItems = mainItems.map(({ item }) => {
+                  const q = item.quantity || 1;
+                  const uPrice = item.unitPrice || (q > 1 && item.price ? Math.round(item.price / q) : item.price) || 0;
+                  return {
+                    id: item.id,
+                    content: item.content || `Sản phẩm ${uPrice}k`,
+                    price: item.price || uPrice * q,
+                    unitPrice: uPrice,
+                    quantity: q,
+                  };
+                });
                 if (isSingleItemOrder) {
                   billItems.push({
                     id: "phu_ship_5k",

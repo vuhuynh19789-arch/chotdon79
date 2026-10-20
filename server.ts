@@ -2829,25 +2829,50 @@ app.post("/api/pancake/push-order", async (req, res) => {
     const itemLines: string[] = [];
 
     items.forEach((it: any, idx: number) => {
-      const p = Number(it.price) || 0;
-      const priceVnd = p > 1000 ? p : p * 1000;
-      const qty = Number(it.quantity) || 1;
+      const qty = Math.max(1, Number(it.quantity) || 1);
+      const rawUnitPrice = Number(it.unitPrice) || 0;
+      const rawPrice = Number(it.price) || 0;
+      let finalUnitPrice = 0;
+      if (rawUnitPrice > 0) {
+        finalUnitPrice = rawUnitPrice;
+      } else if (rawPrice > 0) {
+        if (qty > 1 && (it.totalPrice === rawPrice || (it.totalPrice && rawPrice === it.totalPrice * qty) || (rawPrice % qty === 0 && rawPrice / qty >= 10))) {
+          finalUnitPrice = Math.round(rawPrice / qty);
+        } else {
+          finalUnitPrice = rawPrice;
+        }
+      }
+
+      const priceK = finalUnitPrice > 1000 ? Math.round(finalUnitPrice / 1000) : finalUnitPrice;
+      const priceVnd = finalUnitPrice > 1000 ? finalUnitPrice : finalUnitPrice * 1000;
       const itemTotal = priceVnd * qty;
       totalItemsPrice += itemTotal;
 
       const pastTag = it.isPast ? " [Giữ phiên trước]" : "";
-      const content = it.content && it.content.trim() ? it.content.trim() : `Sản phẩm ${p}k`;
-      itemLines.push(`${idx + 1}. ${content} (${p > 1000 ? Math.round(p / 1000) : p}k x ${qty})${pastTag}`);
+      const content = it.content && it.content.trim() ? it.content.trim() : `Sản phẩm ${priceK}k`;
+      itemLines.push(`${idx + 1}. ${content} (${priceK}k x ${qty})${pastTag}`);
     });
 
     // 3. BƯỚC 2: XỬ LÝ SẢN PHẨM THEO ĐÚNG QUY TRÌNH BARCODE 0(giá_sp)
     const posItems: any[] = [];
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
-      const p = Number(it.price) || 0;
-      const priceK = p > 1000 ? Math.round(p / 1000) : p;
-      const priceVnd = p > 1000 ? p : p * 1000;
-      const qty = Number(it.quantity) || 1;
+      const qty = Math.max(1, Number(it.quantity) || 1);
+      const rawUnitPrice = Number(it.unitPrice) || 0;
+      const rawPrice = Number(it.price) || 0;
+      let finalUnitPrice = 0;
+      if (rawUnitPrice > 0) {
+        finalUnitPrice = rawUnitPrice;
+      } else if (rawPrice > 0) {
+        if (qty > 1 && (it.totalPrice === rawPrice || (it.totalPrice && rawPrice === it.totalPrice * qty) || (rawPrice % qty === 0 && rawPrice / qty >= 10))) {
+          finalUnitPrice = Math.round(rawPrice / qty);
+        } else {
+          finalUnitPrice = rawPrice;
+        }
+      }
+
+      const priceK = finalUnitPrice > 1000 ? Math.round(finalUnitPrice / 1000) : finalUnitPrice;
+      const priceVnd = finalUnitPrice > 1000 ? finalUnitPrice : finalUnitPrice * 1000;
       const content = (it.content || `Sản phẩm ${priceK}k`).trim();
 
       const targetBarcode = `0${priceK}`;
@@ -3074,10 +3099,24 @@ app.post("/api/pancake/push-order", async (req, res) => {
     if (finalPageId && finalConvId && sendNotificationMessage !== false) {
       try {
         const itemNotices: string[] = [];
+        let totalItemsQty = 0;
         items.forEach((it: any) => {
-          const p = Number(it.price) || 0;
-          const priceK = p > 1000 ? Math.round(p / 1000) : p;
-          const qty = Number(it.quantity) || 1;
+          const qty = Math.max(1, Number(it.quantity) || 1);
+          totalItemsQty += qty;
+          const rawUnitPrice = Number(it.unitPrice) || 0;
+          const rawPrice = Number(it.price) || 0;
+          let finalUnitPrice = 0;
+          if (rawUnitPrice > 0) {
+            finalUnitPrice = rawUnitPrice;
+          } else if (rawPrice > 0) {
+            if (qty > 1 && (it.totalPrice === rawPrice || (it.totalPrice && rawPrice === it.totalPrice * qty) || (rawPrice % qty === 0 && rawPrice / qty >= 10))) {
+              finalUnitPrice = Math.round(rawPrice / qty);
+            } else {
+              finalUnitPrice = rawPrice;
+            }
+          }
+
+          const priceK = finalUnitPrice > 1000 ? Math.round(finalUnitPrice / 1000) : finalUnitPrice;
           const hasCustom = it.content && it.content.trim() && it.content.trim() !== "(Không ghi chú)" && !it.content.toLowerCase().includes("không ghi chú");
           const name = hasCustom ? it.content.trim() : `Sản phẩm ${priceK}k`;
           itemNotices.push(`  + ${name} (${priceK}k x ${qty})`);
@@ -3098,7 +3137,7 @@ app.post("/api/pancake/push-order", async (req, res) => {
 
         let autoMsg = `Dạ em chào ${chosenName || finalCustName}, Shop đã tạo đơn thành công cho mình trên Live ạ! ❤️\n\n` +
           `📦 Mã đơn hàng: #${orderCode}\n` +
-          `🛍️ Chi tiết sản phẩm (${items.length} món):\n${itemNotices.join('\n')}\n` +
+          `🛍️ Chi tiết sản phẩm (${totalItemsQty} món):\n${itemNotices.join('\n')}\n` +
           `💰 Tiền hàng: ${totalItemsPrice.toLocaleString('vi-VN')}đ\n` +
           `🚚 Phí vận chuyển: ${finalShipFee.toLocaleString('vi-VN')}đ\n`;
 

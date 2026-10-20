@@ -7,7 +7,7 @@ export const firebaseApp = initializeApp({
 });
 export const firebaseDb = getDatabase(firebaseApp);
 export const SHOP_NAME = "Hiền Phạm | 0965.286.096";
-export const APP_VERSION = "v3.0.0";
+export const APP_VERSION = "v3.3.0";
 
 export function showAppToast(msg: string) {
     try {
@@ -22,6 +22,20 @@ export const PLATFORMS: Record<Platform, { room: string; label: string; colorCla
     facebook: { room: "hienpham_live_fb",     label: "📘 Facebook", colorClass: "text-white", bgClass: "bg-[#1877f2]", borderClass: "border-[#1877f2]" },
     shopee:   { room: "hienpham_live_shopee", label: "🛒 Shopee",   colorClass: "text-white", bgClass: "bg-[#ee4d2d]", borderClass: "border-[#ee4d2d]" }
 };
+
+export function getPlatformRoom(platform: Platform): string {
+    try {
+        const raw = localStorage.getItem('slp_order_push_settings');
+        if (raw) {
+            const settings = JSON.parse(raw);
+            const shopId = settings?.shopId?.trim();
+            if (shopId && shopId !== '30093990') {
+                return `shop_${shopId}_${platform}`;
+            }
+        }
+    } catch {}
+    return PLATFORMS[platform].room;
+}
 
 export const DEVICE_ID = (() => {
     let id = localStorage.getItem('slp_webapp_device_id');

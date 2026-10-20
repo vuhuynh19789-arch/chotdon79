@@ -73,9 +73,14 @@ export function getOrderPushSettings(): OrderPushSettings {
       token = DEFAULT_PANCAKE_TOKEN;
     }
 
+    const isVercel = typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || !window.location.hostname.includes('run.app'));
+    const effectiveMode = isVercel && (!parsed.mode || parsed.mode === 'server_proxy') ? 'client_direct' : (parsed.mode || 'client_direct');
+
     return {
       ...DEFAULT_ORDER_PUSH_SETTINGS,
       ...parsed,
+      mode: effectiveMode,
+      autoFailoverToClient: true,
       pancakeToken: token,
       shopId: parsed.shopId || '30093990',
       warehouseId: parsed.warehouseId || '9872be82-80b0-4486-9260-2b625b2e0325'

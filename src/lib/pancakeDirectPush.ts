@@ -218,10 +218,23 @@ export async function pushOrderDirectlyFromBrowser(
   let totalItemsPrice = 0;
 
   for (const it of payload.items) {
-    const p = Number(it.price) || 0;
-    const priceK = p > 1000 ? Math.round(p / 1000) : p;
-    const priceVnd = p > 1000 ? p : p * 1000;
-    const qty = Number(it.quantity) || 1;
+    const qty = Math.max(1, Number(it.quantity) || 1);
+    const rawUnitPrice = Number(it.unitPrice) || 0;
+    const rawPrice = Number(it.price) || 0;
+
+    let finalUnitPrice = 0;
+    if (rawUnitPrice > 0) {
+      finalUnitPrice = rawUnitPrice;
+    } else if (rawPrice > 0) {
+      if (qty > 1 && (it.totalPrice === rawPrice || (it.totalPrice && rawPrice === it.totalPrice * qty) || (rawPrice % qty === 0 && rawPrice / qty >= 10))) {
+        finalUnitPrice = Math.round(rawPrice / qty);
+      } else {
+        finalUnitPrice = rawPrice;
+      }
+    }
+
+    const priceK = finalUnitPrice > 1000 ? Math.round(finalUnitPrice / 1000) : finalUnitPrice;
+    const priceVnd = finalUnitPrice > 1000 ? finalUnitPrice : finalUnitPrice * 1000;
     totalItemsPrice += priceVnd * qty;
 
     const targetBarcode = `0${priceK}`;
@@ -366,7 +379,8 @@ export async function pushOrderDirectlyFromBrowser(
       try {
         const codAmount = Math.max(0, totalItemsPrice + assignedShippingFee - assignedPrepaid);
         const orderDisplayId = createdOrder?.display_id || createdOrder?.order_number || createdOrder?.id || '';
-        const orderMsgText = `Dạ shop đã lên đơn #${orderDisplayId} cho mình gồm ${payload.items.length} món (${totalItemsPrice.toLocaleString('vi-VN')}₫) ạ! Tiền cọc: ${assignedPrepaid.toLocaleString('vi-VN')}₫. Thu hộ COD: ${codAmount.toLocaleString('vi-VN')}₫. Cảm ơn bạn nhiều ạ! ❤️`;
+        const totalItemsQty = payload.items.reduce((s, it) => s + (it.quantity || 1), 0);
+        const orderMsgText = `Dạ shop đã lên đơn #${orderDisplayId} cho mình gồm ${totalItemsQty} món (${totalItemsPrice.toLocaleString('vi-VN')}₫) ạ! Tiền cọc: ${assignedPrepaid.toLocaleString('vi-VN')}₫. Thu hộ COD: ${codAmount.toLocaleString('vi-VN')}₫. Cảm ơn bạn nhiều ạ! ❤️`;
 
         const msgRes = await fetch(`https://pages.fm/api/v1/pages/${finalPageId}/conversations/${finalConvId}/messages?access_token=${token}`, {
           method: 'POST',

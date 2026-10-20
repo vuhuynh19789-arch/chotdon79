@@ -1404,6 +1404,8 @@ export interface PushOrderItem {
   id?: string;
   content: string;
   price: number;
+  unitPrice?: number;
+  totalPrice?: number;
   quantity?: number;
   variationId?: string;
   variationName?: string;

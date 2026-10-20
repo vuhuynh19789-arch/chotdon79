@@ -343,6 +343,65 @@ export function AlertsHubModal({
             });
         });
 
+        // 2. Bổ sung từ Master History trong LocalStorage nếu có đơn bị sót do reset phiên
+        try {
+            const masterRaw = localStorage.getItem('slp_pushed_orders_master_history');
+            if (masterRaw) {
+                const masterList = JSON.parse(masterRaw);
+                if (Array.isArray(masterList)) {
+                    const existingPushIds = new Set(list.map(it => it.record?.id || it.id));
+                    masterList.forEach((mRec: any) => {
+                        if (!mRec || mRec.status === 'restored') return;
+                        const recId = mRec.id;
+                        if (recId && existingPushIds.has(recId)) return;
+
+                        const p = (mRec.platform || 'tiktok') as Platform;
+                        if (platformFilter !== 'all' && p !== platformFilter) return;
+
+                        const user = normalizeUser(mRec.user || '');
+                        const pStore = store[p];
+                        const nickname = mRec.nickname || pStore?.nicknames?.[user] || '';
+                        const displayName = nickname ? `(${nickname}) ${user}` : `#${getShortId(user)} ${user}`;
+                        const tag = pStore?.tags?.[user] || 'NORMAL';
+                        const avatarUrl = getCustomerAvatar(user, p) || undefined;
+                        const pLink = pStore?.pancakeLinks?.[user];
+                        const recItems = Array.isArray(mRec.items) ? mRec.items : [];
+                        const qty = Number(mRec.totalQuantity) || recItems.reduce((sum: number, it: any) => sum + (Number(it?.quantity) || 1), 0);
+                        const priceK = Number(mRec.totalPrice) || 0;
+                        const recTimestamp = Number(mRec.timestamp) || now;
+
+                        if (query) {
+                            const userLower = user.toLowerCase();
+                            const userNoAcc = removeVietnameseAccents(userLower);
+                            const nickLower = (nickname || '').toLowerCase();
+                            const orderNum = (mRec.orderNumber || '').toLowerCase();
+                            const pancakeId = (mRec.pancakeOrderId || '').toLowerCase();
+                            const matchesUser = userLower.includes(query) || userNoAcc.includes(queryNoAccent) || nickLower.includes(query);
+                            const matchesOrder = orderNum.includes(query) || pancakeId.includes(query);
+                            const matchesItem = recItems.some(it => (it?.content || '').toLowerCase().includes(query));
+                            if (!matchesUser && !matchesOrder && !matchesItem) return;
+                        }
+
+                        list.push({
+                            type: 'push',
+                            id: `push-master-${recId || `${user}-${recTimestamp}`}`,
+                            timestamp: recTimestamp,
+                            user,
+                            platform: p,
+                            displayName,
+                            nickname,
+                            avatarUrl,
+                            tag,
+                            qty,
+                            priceK,
+                            record: mRec,
+                            pLink
+                        });
+                    });
+                }
+            }
+        } catch {}
+
         // Sắp xếp đơn mới đẩy nhất lên đầu
         return list.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
     }, [store, platformFilter, query, queryNoAccent, now]);

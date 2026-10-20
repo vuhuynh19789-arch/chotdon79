@@ -150,8 +150,9 @@ export const QuickOrderPushModal: React.FC<QuickOrderPushModalProps> = ({
         return {
           id: item.id,
           content: fullContent,
-          price: tK,
+          price: uPrice,
           unitPrice: uPrice,
+          totalPrice: tK,
           quantity: q,
           isPast
         };
@@ -165,6 +166,7 @@ export const QuickOrderPushModal: React.FC<QuickOrderPushModalProps> = ({
               content: "Phụ ship 5k",
               price: 5,
               unitPrice: 5,
+              totalPrice: 5,
               quantity: 1,
               isPast: false,
             },
@@ -177,7 +179,7 @@ export const QuickOrderPushModal: React.FC<QuickOrderPushModalProps> = ({
       const pId = activeInsight?.pancakePageId || parsed.pageId || (pLink.includes('pzl') ? 'pzl_2007152536191688636' : undefined);
       const cId = activeInsight?.pancakeConvId || parsed.convId || (pLink.startsWith('pzl_') ? pLink : undefined);
 
-      const res = await pushCustomerOrderToPancake({
+      let res = await pushCustomerOrderToPancake({
         platform,
         user: cleanUser,
         nickname,
@@ -224,8 +226,8 @@ export const QuickOrderPushModal: React.FC<QuickOrderPushModalProps> = ({
       const pushedItemsToRecord: OrderItem[] = itemsPayload.map((it, idx) => ({
         id: it.id || `pushed_${Date.now()}_${idx}`,
         content: it.content,
-        price: it.price,
-        unitPrice: it.unitPrice,
+        price: it.totalPrice || ((it.unitPrice || it.price) * (it.quantity || 1)),
+        unitPrice: it.unitPrice || it.price,
         quantity: it.quantity,
         sourceCommentId: null,
         createdAt: Date.now()

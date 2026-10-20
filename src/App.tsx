@@ -1231,9 +1231,27 @@ export default function App() {
         />
 
         {toastNotification && (
-            <div className="fixed top-12 sm:top-14 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 border-2 border-emerald-300/80 text-white font-black text-xs sm:text-sm px-5 py-3 rounded-full shadow-[0_10px_35px_rgba(0,0,0,0.8)] flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none tracking-wide">
-                <span className="text-base sm:text-lg">🎉</span>
-                <span>{toastNotification}</span>
+            <div className="fixed top-3 sm:top-4 left-1/2 -translate-x-1/2 z-[9999] w-[95%] sm:w-[680px] max-w-2xl bg-gradient-to-r from-[#0a1f16] via-[#103023] to-[#0a1f16] border-2 border-emerald-400 text-white px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl shadow-[0_12px_45px_rgba(0,0,0,0.95),0_0_25px_rgba(16,185,129,0.3)] flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-6 duration-300 backdrop-blur-lg">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="w-9 h-9 rounded-xl bg-emerald-500/25 border border-emerald-400/70 flex items-center justify-center text-lg shrink-0 shadow-inner">
+                        🎉
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-widest font-black text-emerald-300">THÔNG BÁO ĐẨY ĐƠN</span>
+                            <span className="text-[9px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 px-1.5 py-0.2 rounded font-bold">THÀNH CÔNG</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-black text-white truncate mt-0.5 tracking-tight">{toastNotification}</div>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setToastNotification(null)}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center text-xs font-bold shrink-0 transition-colors cursor-pointer"
+                    title="Đóng thông báo"
+                >
+                    ✕
+                </button>
             </div>
         )}
     </div>
