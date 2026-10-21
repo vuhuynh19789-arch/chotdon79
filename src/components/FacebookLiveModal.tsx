@@ -45,9 +45,10 @@ interface FacebookLiveModalProps {
   isOpen: boolean;
   onClose: () => void;
   onBack?: () => void;
+  onOpenPancakeLive?: () => void;
 }
 
-export const FacebookLiveModal: React.FC<FacebookLiveModalProps> = ({ isOpen, onClose, onBack }) => {
+export const FacebookLiveModal: React.FC<FacebookLiveModalProps> = ({ isOpen, onClose, onBack, onOpenPancakeLive }) => {
   const { modalStyle, touchHandlers } = useSwipeToDismiss({ onClose: onBack || onClose, enabled: isOpen });
   const [target, setTarget] = useState<string>(() => {
     try {
@@ -268,6 +269,32 @@ export const FacebookLiveModal: React.FC<FacebookLiveModalProps> = ({ isOpen, on
 
         {/* Body Content */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
+          {/* Banner kết nối trực tiếp bài viết / Livestream Pancake */}
+          {onOpenPancakeLive && (
+            <div className="bg-gradient-to-r from-orange-950/40 via-amber-950/30 to-[#141c28] border border-orange-500/40 rounded-xl p-3 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-2xl">🥞</span>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-orange-300 flex items-center gap-1.5">
+                    <span>Xem Bài Viết & Bình Luận Pancake</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded font-black bg-orange-500/20 text-orange-200 border border-orange-500/30">MẪU IN THỐNG NHẤT</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                    Chọn bài live từ danh sách • Cào bình luận trực tiếp • Không cần chuyển app
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onOpenPancakeLive}
+                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-bold text-xs rounded-xl transition-all shadow-md shrink-0 cursor-pointer whitespace-nowrap"
+              >
+                Mở Xem Ngay
+              </button>
+            </div>
+          )}
+
           {/* Card Trạng Thái Máy Chủ TV Box */}
           <div className="bg-[#0d1420] border border-white/10 rounded-xl p-3.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fbGet, fbPut, DEVICE_ID, PLATFORMS, Platform, printLabel, firebaseDb, getShortId, normalizeUser, extractPriceFromContent, addRecentClosedPrice, parsePriceAndQuantity } from './lib/core';
+import { fbGet, fbPut, DEVICE_ID, PLATFORMS, Platform, printLabel, PrintLabelOptions, firebaseDb, getShortId, normalizeUser, extractPriceFromContent, addRecentClosedPrice, parsePriceAndQuantity } from './lib/core';
 import { ref, onValue, set as rtdbSet } from 'firebase/database';
 
 export type { Platform };
@@ -49,6 +49,15 @@ export interface CommentData {
   platform: Platform;
   sessionId?: string;
   sessionTitle?: string;
+  nickname?: string;
+  comment?: string;
+  pancakeConvId?: string;
+  pancakePageId?: string;
+  phone?: string;
+  orderCount?: number;
+  totalSpend?: number;
+  province?: string;
+  location?: string;
 }
 
 export interface PinnedData {
@@ -169,7 +178,7 @@ export interface AppState {
   addMultipleCustomOrderItems: (platform: Platform, user: string, items: Array<{ content?: string, unitPrice: number, quantity: number, price?: number, sourceCommentId?: string | null }>, printNow?: boolean) => void;
   initCustomer: (platform: Platform, user: string) => void;
   updateCustomerStats: (platform: Platform, user: string, newCount: number, newTotal: number) => void;
-  printNewOrder: (platform: Platform, user: string, content: string, price: number | string, time: string, sourceCommentId: string | null, bypassDebounce?: boolean, skipPrint?: boolean) => void;
+  printNewOrder: (platform: Platform, user: string, content: string, price: number | string, time: string, sourceCommentId: string | null, bypassDebounce?: boolean, skipPrint?: boolean, extraOptions?: PrintLabelOptions) => void;
   deleteOrderItem: (platform: Platform, user: string, itemIndex: number, isPast?: boolean, targetItemId?: string) => void;
   updateOrderItemQuantity: (platform: Platform, user: string, itemIndex: number, newQty: number, isPast?: boolean, targetItemId?: string) => void;
   updateOrderItemPriceAndQuantity: (platform: Platform, user: string, itemIndex: number, newUnitPrice: number, newQty: number, isPast?: boolean, targetItemId?: string) => void;
@@ -2254,7 +2263,7 @@ const decodeKeys = (obj: any) => {
             pushData(platform, 'customers', newCusts, now);
         },
 
-        printNewOrder: (platform, rawUser, content, price, time, sourceCommentId, bypassDebounce, skipPrint) => {
+        printNewOrder: (platform, rawUser, content, price, time, sourceCommentId, bypassDebounce, skipPrint, extraOptions) => {
             const user = normalizeUser(rawUser);
             get().recordOrder(platform, user, price, content, sourceCommentId);
             if (sourceCommentId) {
@@ -2266,10 +2275,38 @@ const decodeKeys = (obj: any) => {
                 const isGl = isCustomerGheLay(get()[platform].gheLayTags, user, get()[platform].tags);
                 const { unitPrice, quantity, totalPrice } = parsePriceAndQuantity(price);
                 const printPrice = totalPrice > 0 ? totalPrice : (unitPrice > 0 ? unitPrice : (parseInt(String(price)) || 0));
+                const formula = quantity > 1 ? `${unitPrice}*${quantity}` : String(printPrice);
                 const printContent = quantity > 1 
                     ? (content ? `${content} (${unitPrice}k x ${quantity})` : `(${unitPrice}k x ${quantity})`)
                     : content;
-                printLabel(nickname ? `(${nickname}) ${user}` : `#${getShortId(user)} ${user}`, printContent, printPrice, time, PLATFORMS[platform].label, bypassDebounce, isGl);
+
+                let phone = extraOptions?.phone;
+                let province = extraOptions?.province;
+                if (!phone || !province) {
+                    const comments = get()[platform].comments || [];
+                    const found = comments.find(c => c.id === sourceCommentId || normalizeUser(c.user) === user);
+                    if (found) {
+                        if (!phone && found.phone) phone = found.phone;
+                        if (!province && (found.province || found.location)) province = found.province || found.location;
+                    }
+                }
+
+                printLabel(
+                    nickname ? `(${nickname}) ${user}` : `#${getShortId(user)} ${user}`, 
+                    printContent, 
+                    formula, 
+                    time, 
+                    PLATFORMS[platform].label, 
+                    bypassDebounce, 
+                    isGl,
+                    {
+                        phone,
+                        province,
+                        quantity,
+                        unitPrice,
+                        orderCount: extraOptions?.orderCount
+                    }
+                );
             }
         },
 

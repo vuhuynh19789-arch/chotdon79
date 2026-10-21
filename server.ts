@@ -400,10 +400,24 @@ async function connectToTikTokLive(username: string, syncFirebaseRoom: string = 
   });
 
   connection.on("error", (err: any) => {
-    const errMsg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-    console.warn(`[TikTok Live Warning @${targetUser}]:`, errMsg);
-    currentTikTokState.lastError = errMsg;
-    broadcastSSE("error", { error: errMsg });
+    const rawMsg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+    const isOfflineOrProbe = 
+      rawMsg.includes("Failed to retrieve live status") ||
+      rawMsg.includes("Failed to retrieve Room ID") ||
+      rawMsg.includes("ERR_NON_2XX_3XX_RESPONSE") ||
+      rawMsg.includes("Error while connecting") ||
+      rawMsg.includes("LIVE_NOT_FOUND");
+
+    if (isOfflineOrProbe) {
+      console.log(`[TikTok Live Info @${targetUser}]: Kênh hiện chưa phát Live hoặc đang offline.`);
+    } else {
+      console.warn(`[TikTok Live Warning @${targetUser}]:`, rawMsg.slice(0, 250));
+    }
+    const cleanError = isOfflineOrProbe 
+      ? `Kênh @${targetUser} hiện chưa bật Live trên TikTok.` 
+      : (err?.message || "Lỗi kết nối TikTok Live");
+    currentTikTokState.lastError = cleanError;
+    broadcastSSE("error", { error: cleanError });
   });
 
   try {
@@ -446,7 +460,18 @@ async function connectToTikTokLive(username: string, syncFirebaseRoom: string = 
     };
   } catch (err: any) {
     const rawMsg = err?.message || (typeof err === 'object' ? JSON.stringify(err) : String(err || ""));
-    console.warn(`[TikTok Live Info @${targetUser}]:`, rawMsg);
+    const isOfflineOrProbe = 
+      rawMsg.includes("Failed to retrieve live status") ||
+      rawMsg.includes("Failed to retrieve Room ID") ||
+      rawMsg.includes("ERR_NON_2XX_3XX_RESPONSE") ||
+      rawMsg.includes("Error while connecting") ||
+      rawMsg.includes("LIVE_NOT_FOUND");
+
+    if (isOfflineOrProbe) {
+      console.log(`[TikTok Live Info @${targetUser}]: Kênh chưa bật Live trên TikTok.`);
+    } else {
+      console.warn(`[TikTok Live Info @${targetUser}]:`, rawMsg.slice(0, 250));
+    }
 
     // Humanize technical TikTok API errors into clear Vietnamese guidance
     let friendlyMsg = "Không thể kết nối phòng Live. Vui lòng kiểm tra lại tên kênh và đảm bảo kênh đang phát trực tiếp.";
@@ -543,15 +568,21 @@ setInterval(async () => {
           }
         }
 
-        // Tự động kết nối nếu đang có live và chưa kết nối
+        // Tự động kết nối nếu có yêu cầu cào Live
         const targetChannel = data.channel || data.username || "hienpham.965286096";
         const now = Date.now();
         if (targetChannel && !currentTikTokState.isStopped && (!activeTikTokConnection || !currentTikTokState.isConnected)) {
-          if (now - lastCloudAttemptTime > 15000) {
+          const isExplicitRequest = (data.action === "connect" || data.isLive === true) && (now - reqTime < 60000);
+          const cooldownPeriod = isExplicitRequest ? 15000 : 300000; // 5 phút nếu offline / không có request mới
+          if (now - lastCloudAttemptTime > cooldownPeriod) {
             lastCloudAttemptTime = now;
-            console.log(`=> 🚀 [Cloud Server] Tự động kết nối TikTok Live cho kênh @${targetChannel}...`);
-            connectToTikTokLive(targetChannel, "hienpham_live").catch(err => {
-              console.warn("[Cloud Server] Tự động kết nối chưa thành công:", err?.message || err);
+            console.log(`=> 🚀 [Cloud Server] Kiểm tra TikTok Live cho kênh @${targetChannel}...`);
+            connectToTikTokLive(targetChannel, "hienpham_live").then((res) => {
+              if (res.isOffline) {
+                lastCloudAttemptTime = Date.now() + 300000; // Tạm dừng thử lại 5 phút khi offline
+              }
+            }).catch(() => {
+              lastCloudAttemptTime = Date.now() + 300000;
             });
           }
         }
@@ -1044,6 +1075,287 @@ app.get("/api/pancake/pages/:pageId/conversations/:convId/messages", async (req,
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Cache tin nhắn theo conversation để tránh fetch lặp lại khi không có tin mới
+const pancakeThreadMessagesCache = new Map<string, { key: string; messages: any[]; ts: number }>();
+// Cache thông tin chi tiết khách hàng (orderCount, totalSpend, province, phone, avatar)
+const pancakeCustomerDetailsCache = new Map<string, { phone?: string; orderCount?: number; totalSpend?: number; province?: string; avatar?: string; ts: number }>();
+
+// 1. Endpoint lấy danh sách bài viết / livestream của Page từ Pancake (giống ảnh 1)
+app.get("/api/pancake/pages/:pageId/posts", async (req, res) => {
+  try {
+    const token = (req.query.token as string || DEFAULT_PANCAKE_TOKEN).trim();
+    const { pageId } = req.params;
+    const pageSize = req.query.page_size || "40";
+    const response = await fetch(`https://pages.fm/api/v1/pages/${pageId}/posts?access_token=${token}&page_size=${pageSize}`, {
+      signal: AbortSignal.timeout(6000)
+    });
+    const data: any = await response.json();
+    const rawPosts = data.data || data.posts || [];
+    
+    // Chuẩn hóa bài viết
+    const posts = rawPosts.map((p: any) => {
+      const pId = String(p.id || p.post_id || "");
+      const cleanNumericId = pId.includes("_") ? pId.split("_")[1] : pId;
+      const type = String(p.type || "").toLowerCase();
+      const message = String(p.message || p.story || "").trim();
+      const isLivestream = type === "livestream" || type.includes("live") || message.toLowerCase().includes("trực tiếp") || message.toLowerCase().includes("livestream") || Boolean(p.is_live);
+      const commentsCount = Number(p.total_comment || p.comment_count || p.comments_count || 0);
+      const createdTime = p.created_time || p.inserted_at || "";
+      
+      // Thumbnail
+      let thumbnail = "";
+      if (p.attachments?.data?.[0]?.media?.image?.src) {
+        thumbnail = p.attachments.data[0].media.image.src;
+      } else if (p.picture || p.image_url) {
+        thumbnail = p.picture || p.image_url;
+      }
+
+      return {
+        id: pId,
+        rawId: cleanNumericId,
+        message: message || (isLivestream ? "Hiền Phạm Shop đang phát trực tiếp." : "Bài viết trên Page"),
+        type,
+        isLivestream,
+        commentsCount,
+        createdTime,
+        thumbnail
+      };
+    });
+
+    // Sắp xếp: Ưu tiên Livestream lên đầu, sau đó theo thời gian mới nhất
+    posts.sort((a: any, b: any) => {
+      if (a.isLivestream && !b.isLivestream) return -1;
+      if (!a.isLivestream && b.isLivestream) return 1;
+      return new Date(b.createdTime || 0).getTime() - new Date(a.createdTime || 0).getTime();
+    });
+
+    res.json({ success: true, posts });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. Endpoint cào bình luận thời gian thực cho bài Live từ Pancake (tự động cào trực tiếp không cần mở trình duyệt Facebook)
+app.get("/api/pancake/pages/:pageId/live-comments", async (req, res) => {
+  try {
+    const token = (req.query.token as string || DEFAULT_PANCAKE_TOKEN).trim();
+    const { pageId } = req.params;
+    const postId = String(req.query.postId || "").trim();
+    const since = Number(req.query.since || 0);
+
+    const cleanPostId = postId.includes("_") ? postId.split("_")[1] : postId;
+
+    // 1. Lấy danh sách hội thoại loại COMMENT gần nhất từ Pancake API
+    const convUrl = `https://pages.fm/api/v1/pages/${pageId}/conversations?type=COMMENT&access_token=${token}&page_size=80`;
+    const convRes = await fetch(convUrl, { signal: AbortSignal.timeout(6500) });
+    if (!convRes.ok) {
+      return res.status(500).json({ success: false, error: "Không thể lấy danh sách bình luận từ Pancake" });
+    }
+    const convData: any = await convRes.json();
+    const conversations = convData.conversations || [];
+
+    // Lọc các cuộc trò chuyện thuộc bài viết / livestream này (nếu có postId cụ thể)
+    let matchedConvs = conversations;
+    if (cleanPostId && cleanPostId !== "auto" && cleanPostId !== "latest" && cleanPostId !== "all") {
+      matchedConvs = conversations.filter((c: any) => {
+        const cPostId = String(c.post_id || "");
+        const cId = String(c.id || "");
+        return cPostId.includes(cleanPostId) || cId.startsWith(cleanPostId);
+      });
+      // Nếu lọc postId mà không khớp bình luận nào thì lấy các cuộc trò chuyện COMMENT gần nhất để không bị sót
+      if (matchedConvs.length === 0 && conversations.length > 0) {
+        matchedConvs = conversations.slice(0, 35);
+      }
+    } else {
+      matchedConvs = conversations.slice(0, 50);
+    }
+
+    // 2. Đọc tin nhắn chi tiết trong từng cuộc trò chuyện
+    const now = Date.now();
+    const msgPromises = matchedConvs.map(async (c: any) => {
+      const custId = c.customers?.[0]?.id || c.customer?.id;
+      const custFbId = String(c.from?.id || c.customers?.[0]?.fb_id || "").trim();
+      
+      // Kiểm tra token Meta EAAB (nếu có để gọi Graph API avatar)
+      const fbToken = (req.query.fbToken as string || (token.startsWith("EAA") ? token : "")).trim();
+      let custAvatar = c.customer?.avatar_url || c.from?.avatar_url || c.customers?.[0]?.avatar_url || "";
+      if (!custAvatar && custFbId) {
+        if (fbToken) {
+          custAvatar = `https://graph.facebook.com/${custFbId}/picture?type=square&access_token=${encodeURIComponent(fbToken)}`;
+        } else if (/^\d{4,15}$/.test(custFbId)) {
+          // ID người dùng số ngắn (UID chuẩn) có thể lấy qua Graph công khai
+          custAvatar = `https://graph.facebook.com/${custFbId}/picture?type=square`;
+        }
+      }
+
+      let custPhone = c.recent_phone_numbers?.[0] || c.customer?.phone_number || undefined;
+      let custOrderCount = c.customers?.[0]?.order_count !== undefined ? c.customers[0].order_count : c.customer?.order_count;
+      let custTotalSpend = c.customers?.[0]?.purchased_amount !== undefined ? c.customers[0].purchased_amount : c.customer?.purchased_amount;
+      let custProvince = c.customers?.[0]?.province || c.customer?.province || c.customers?.[0]?.city || c.customer?.city || "";
+      const userName = (c.from?.name || c.customer?.name || c.customers?.[0]?.name || "Khách FB").trim();
+
+      // Kiểm tra tags xem có tỉnh thành không
+      if (!custProvince && Array.isArray(c.tags)) {
+        const found = c.tags.map((t: any) => typeof t === "string" ? t : t.name || t.text || "").find((t: string) => {
+          const l = t.toLowerCase();
+          return l.includes("thuận") || l.includes("ninh") || l.includes("bình") || l.includes("chí minh") || l.includes("hcm") || l.includes("nội") || l.includes("đà") || l.includes("đồng") || l.includes("an");
+        });
+        if (found) custProvince = found;
+      }
+
+      // Làm giàu từ cache chi tiết khách hàng nếu có
+      if (custId) {
+        const cachedCust = pancakeCustomerDetailsCache.get(custId);
+        if (cachedCust && (now - cachedCust.ts < 300000)) {
+          if (!custPhone && cachedCust.phone) custPhone = cachedCust.phone;
+          if (custOrderCount === undefined && cachedCust.orderCount !== undefined) custOrderCount = cachedCust.orderCount;
+          if (custTotalSpend === undefined && cachedCust.totalSpend !== undefined) custTotalSpend = cachedCust.totalSpend;
+          if (!custProvince && cachedCust.province) custProvince = cachedCust.province;
+          if (!custAvatar && cachedCust.avatar) custAvatar = cachedCust.avatar;
+        } else {
+          // Lấy thông tin khách hàng trong nền để sẵn sàng cho lần quét tiếp theo
+          fetch(`https://pages.fm/api/v1/pages/${pageId}/customers/${custId}?access_token=${token}`, { signal: AbortSignal.timeout(3000) })
+            .then(r => r.json())
+            .then(custData => {
+              const cd = custData.data || custData.customer || {};
+              const recentOrders = cd.recent_orders || [];
+              const p = cd.phone_numbers?.[0] || recentOrders[0]?.phone_number || cd.phone_number;
+              const oCount = cd.order_count || recentOrders.length;
+              const spend = cd.purchased_amount || recentOrders.reduce((s: number, o: any) => s + (o.payment || 0), 0);
+              let prov = cd.province || cd.city || cd.lives_in;
+              if (!prov && cd.addresses?.[0]) {
+                prov = cd.addresses[0].province || cd.addresses[0].city || cd.addresses[0].full_address;
+              }
+              if (prov && typeof prov === "string") {
+                if (prov.includes("Ninh Thuận")) prov = "Ninh Thuận";
+                else if (prov.includes("Bình Thuận")) prov = "Bình Thuận";
+                else if (prov.includes("Hồ Chí Minh") || prov.includes("HCM")) prov = "Hồ Chí Minh";
+              }
+              const av = cd.avatar_url || cd.photo_url || cd.picture || cd.image_url;
+              pancakeCustomerDetailsCache.set(custId, {
+                phone: p,
+                orderCount: oCount,
+                totalSpend: spend,
+                province: prov,
+                avatar: av,
+                ts: Date.now()
+              });
+            })
+            .catch(() => {});
+        }
+      }
+
+      if (!custId) {
+        const snippetMsg = (c.snippet || c.message || "").replace(/<[^>]+>/g, "").trim();
+        if (!snippetMsg) return [];
+        const msgTime = new Date(c.inserted_at || c.updated_at || Date.now()).getTime();
+        return [{
+          id: String(c.id || `pancake_${now}`),
+          user: userName,
+          nickname: userName,
+          comment: snippetMsg,
+          content: snippetMsg,
+          time: new Date(msgTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          ts: msgTime,
+          avatar: custAvatar,
+          platform: "facebook",
+          pancakeConvId: c.id,
+          pancakePageId: pageId,
+          phone: custPhone,
+          orderCount: custOrderCount,
+          totalSpend: custTotalSpend,
+          province: custProvince,
+          location: custProvince
+        }];
+      }
+
+      const cacheKey = `${c.id}_${c.message_count || 0}_${c.updated_at || ""}`;
+      const cached = pancakeThreadMessagesCache.get(c.id);
+      if (cached && cached.key === cacheKey && (now - cached.ts < 20000)) {
+        return cached.messages;
+      }
+
+      try {
+        const mRes = await fetch(`https://pages.fm/api/v1/pages/${pageId}/conversations/${c.id}/messages?customer_id=${custId}&access_token=${token}`, {
+          signal: AbortSignal.timeout(4000)
+        });
+        if (!mRes.ok) throw new Error("Fetch messages failed");
+        const mData: any = await mRes.json();
+        const rawMsgs = mData.messages || [];
+        
+        const threadComments = rawMsgs.map((m: any) => {
+          const rawText = (m.original_message || m.message || "").replace(/<[^>]+>/g, "").trim();
+          const mTime = new Date(m.inserted_at || m.created_time || Date.now()).getTime();
+          const senderName = (m.from?.name || userName).trim();
+          return {
+            id: String(m.id || `${c.id}_${mTime}`),
+            user: senderName,
+            nickname: senderName,
+            comment: rawText,
+            content: rawText,
+            time: new Date(mTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+            ts: mTime,
+            avatar: custAvatar,
+            platform: "facebook",
+            pancakeConvId: c.id,
+            pancakePageId: pageId,
+            phone: custPhone,
+            orderCount: custOrderCount,
+            totalSpend: custTotalSpend,
+            province: custProvince,
+            location: custProvince
+          };
+        }).filter((item: any) => Boolean(item.comment));
+
+        pancakeThreadMessagesCache.set(c.id, { key: cacheKey, messages: threadComments, ts: now });
+        return threadComments;
+      } catch {
+        const snippetMsg = (c.snippet || c.message || "").replace(/<[^>]+>/g, "").trim();
+        if (!snippetMsg) return [];
+        const msgTime = new Date(c.inserted_at || c.updated_at || Date.now()).getTime();
+        return [{
+          id: String(c.id || `pancake_${now}`),
+          user: userName,
+          nickname: userName,
+          comment: snippetMsg,
+          content: snippetMsg,
+          time: new Date(msgTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          ts: msgTime,
+          avatar: custAvatar,
+          platform: "facebook",
+          pancakeConvId: c.id,
+          pancakePageId: pageId,
+          phone: custPhone,
+          orderCount: custOrderCount,
+          totalSpend: custTotalSpend,
+          province: custProvince,
+          location: custProvince
+        }];
+      }
+    });
+
+    const threadResults = await Promise.all(msgPromises);
+    let allComments = threadResults.flat();
+
+    // Sắp xếp theo thời gian tăng dần
+    allComments.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    if (since > 0) {
+      allComments = allComments.filter(c => (c.ts || 0) > since);
+    }
+
+    res.json({
+      success: true,
+      pageId,
+      postId: cleanPostId,
+      totalCount: allComments.length,
+      comments: allComments
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

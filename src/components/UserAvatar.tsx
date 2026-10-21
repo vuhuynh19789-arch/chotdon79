@@ -135,7 +135,8 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = memo(({
     const effectiveIsNt = rawIsNt && !effectiveIsGl;
 
     // 1. O(1) Instant Lookup: direct prop or global customer avatar registry (Zero store subscriptions)
-    const effectiveAvatarUrl = avatarUrl || getCustomerAvatar(cleanUser, platform);
+    // Tự động đối soát chéo avatar giữa Facebook, TikTok và Zalo theo tên khách
+    const effectiveAvatarUrl = avatarUrl || getCustomerAvatar(cleanUser, platform) || getCustomerAvatar(cleanUser);
 
     // 2. Tra cứu tức thì từ bộ nhớ đệm Memory Cache (0ms - chống chớp giật 100% khi cuộn)
     const initialCached = getAvatarFromMemory(effectiveAvatarUrl, cleanUser);
@@ -145,7 +146,7 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = memo(({
     // 3. Cập nhật currentSrc tức thì khi props thay đổi
     useEffect(() => {
         setImgError(false);
-        const targetUrl = avatarUrl || getCustomerAvatar(cleanUser, platform);
+        const targetUrl = avatarUrl || getCustomerAvatar(cleanUser, platform) || getCustomerAvatar(cleanUser);
         const mem = getAvatarFromMemory(targetUrl, cleanUser);
         if (mem) {
             setCurrentSrc(mem);
@@ -157,8 +158,15 @@ export const CustomerAvatar: React.FC<CustomerAvatarProps> = memo(({
     }, [cleanUser, platform, avatarUrl]);
 
     const handleImgError = () => {
+        // Thử tìm avatar từ các nền tảng khác của khách hàng này nếu URL hiện tại bị lỗi
+        const crossAv = getCustomerAvatar(cleanUser);
+        if (crossAv && crossAv !== currentSrc && !crossAv.includes('graph.facebook.com')) {
+            setCurrentSrc(crossAv);
+            return;
+        }
+
         // Nếu URL trực tiếp lỗi (do CORS, hết hạn CDN hoặc chặn hotlink), thử qua avatar proxy
-        if (currentSrc && !currentSrc.startsWith('data:') && !currentSrc.includes('/api/proxy-avatar')) {
+        if (currentSrc && !currentSrc.startsWith('data:') && !currentSrc.includes('/api/proxy-avatar') && !currentSrc.includes('graph.facebook.com')) {
             const proxy = `/api/proxy-avatar?url=${encodeURIComponent(currentSrc)}&name=${encodeURIComponent(cleanUser)}`;
             setCurrentSrc(proxy);
         } else {

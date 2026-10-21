@@ -100,6 +100,28 @@ export function parsePriceAndQuantity(priceInput: number | string): { unitPrice:
     const str = String(priceInput || '').trim();
     if (!str) return { unitPrice: 0, quantity: 1, totalPrice: 0 };
 
+    // Hỗ trợ công thức nhân kèm kết quả: "71*2=142", "71*2 = 142", "71x2=142", "71 x 2 = 142", "71×2=142"
+    const mulEqualMatch = str.match(/^(\d+(?:\.\d+)?)\s*(?:k|ka|ca|cành)?\s*[*xX×]\s*(\d+(?:\.\d+)?)\s*(?:k|ka|ca|cành)?\s*=\s*(\d+(?:\.\d+)?)\s*(?:k|ka|ca|cành)?$/i);
+    if (mulEqualMatch) {
+        let n1 = parseFloat(mulEqualMatch[1]);
+        let n2 = parseFloat(mulEqualMatch[2]);
+        let total = parseFloat(mulEqualMatch[3]);
+        let unitPrice = n1;
+        let qty = n2;
+        if (n1 < 10 && n2 >= 10 && Number.isInteger(n1)) {
+            unitPrice = n2;
+            qty = n1;
+        }
+        const roundedPrice = Math.round(unitPrice);
+        const roundedQty = Math.max(1, Math.round(qty));
+        const roundedTotal = Math.round(total || (roundedPrice * roundedQty));
+        return {
+            unitPrice: roundedPrice,
+            quantity: roundedQty,
+            totalPrice: roundedTotal
+        };
+    }
+
     // Hỗ trợ định dạng nhân SL: "99*2", "2*99", "99x2", "2 x 99", "99×2"
     const mulMatch = str.match(/^(\d+(?:\.\d+)?)\s*(?:k|ka|ca|cành)?\s*[*xX×]\s*(\d+(?:\.\d+)?)\s*(?:k|ka|ca|cành)?$/i);
     if (mulMatch) {
@@ -128,12 +150,13 @@ export function parsePriceAndQuantity(priceInput: number | string): { unitPrice:
 export function extractPriceFromContent(text: string) {
     if (!text || typeof text !== 'string') return { price: "", content: "" };
 
-    // 1. Ưu tiên bóc tách công thức nhân: "99*2", "áo 99*2", "2*99", "99x2", "99 x 2"
-    const mulRegex = /(?:^|\s)(\d+)\s*(?:k|ka|ca|cành)?\s*[*xX×]\s*(\d+)\s*(?:k|ka|ca|cành)?(?:\s|$)/i;
+    // 1. Ưu tiên bóc tách công thức nhân: "71*2=142", "99*2", "áo 99*2", "2*99", "99x2", "99 x 2"
+    const mulRegex = /(?:^|\s)(\d+)\s*(?:k|ka|ca|cành)?\s*[*xX×]\s*(\d+)\s*(?:k|ka|ca|cành)?(?:\s*=\s*(\d+)\s*(?:k|ka|ca|cành)?)?(?:\s|$)/i;
     const mulMatch = text.match(mulRegex);
     if (mulMatch) {
         let n1 = parseInt(mulMatch[1], 10);
         let n2 = parseInt(mulMatch[2], 10);
+        let explicitTotal = mulMatch[3] ? parseInt(mulMatch[3], 10) : undefined;
         if (n1 > 0 && n2 > 0) {
             let unitPrice = n1;
             let qty = n2;
@@ -142,7 +165,7 @@ export function extractPriceFromContent(text: string) {
                 qty = n1;
             }
             if (unitPrice >= 10) {
-                const fullFormula = `${unitPrice}*${qty}`;
+                const fullFormula = explicitTotal ? `${unitPrice}*${qty}=${explicitTotal}` : `${unitPrice}*${qty}`;
                 const matchedRaw = mulMatch[0].trim();
                 const lastIdx = text.lastIndexOf(matchedRaw);
                 const content = (text.substring(0, lastIdx) + " " + text.substring(lastIdx + matchedRaw.length)).replace(/\s+/g, ' ').trim();
@@ -439,6 +462,14 @@ export function formatUserForPrint(rawUser: string, isGheLay?: boolean): string 
     return cleanUserForPrint(rawUser);
 }
 
+export interface PrintLabelOptions {
+    phone?: string;
+    province?: string;
+    quantity?: number;
+    unitPrice?: number;
+    orderCount?: number;
+}
+
 export function printLabel(
     user: string, 
     content: string, 
@@ -446,11 +477,12 @@ export function printLabel(
     time: string, 
     platformLabel: string, 
     bypassDebounce?: boolean,
-    isGheLayParam?: boolean
+    isGheLayParam?: boolean,
+    options?: PrintLabelOptions
 ) {
     const isGheLay = isGheLayParam !== undefined ? Boolean(isGheLayParam) : checkCustomerIsGheLay(user);
     const baseUser = cleanUserForPrint(user);
-    let sig = `${baseUser}|${content}|${priceValue}|${isGheLay}`;
+    let sig = `${baseUser}|${content}|${priceValue}|${isGheLay}|${options?.phone || ''}|${options?.province || ''}`;
     let now = Date.now();
     if (!bypassDebounce && sig === lastPrintSignature && (now - lastPrintTime) < 3000) return;
     lastPrintSignature = sig; lastPrintTime = now;
@@ -462,11 +494,14 @@ export function printLabel(
         const w = 780; canvas.width = w;
         const priceColWidth = 300; const rightColX = w - priceColWidth - 15; const leftColWidth = rightColX - 20;
 
+        const { unitPrice, quantity, totalPrice } = parsePriceAndQuantity(priceValue);
+        const finalUnitPrice = options?.unitPrice || unitPrice;
+        const finalQty = options?.quantity || quantity;
+        const pNum = totalPrice > 0 ? totalPrice : (finalUnitPrice > 0 ? finalUnitPrice : (parseInt(String(priceValue)) || 0));
+        const hasPrice = pNum > 0;
+
         ctx.font = "bold 35px Arial";
         const lines = (!content || content.trim() === "") ? [] : wrapText(ctx, content, leftColWidth);
-
-        let pNum = parseInt(priceValue as string) || 0;
-        let hasPrice = pNum > 0;
 
         ctx.font = "900 55px Arial";
         const userLines = wrapText(ctx, baseUser, leftColWidth);
@@ -484,11 +519,18 @@ export function printLabel(
         const badgeFitsOnSameLine = isGheLay && (lastUserLineWidth + 14 + badgeWidth <= leftColWidth);
         const badgeNeedsOwnLine = isGheLay && !badgeFitsOnSameLine;
 
+        // Dòng phụ hiển thị Tỉnh thành / SĐT khách (nếu có)
+        const subInfo = [
+            options?.province ? `[${options.province}]` : '',
+            options?.phone ? `SĐT: ${options.phone}` : ''
+        ].filter(Boolean).join('  •  ');
+        const hasSubInfo = Boolean(subInfo);
+
         let headerHeight = 110;
-        let userHeight = (userLines.length * 60) + (badgeNeedsOwnLine ? 50 : 0);
+        let userHeight = (userLines.length * 60) + (badgeNeedsOwnLine ? 50 : 0) + (hasSubInfo ? 36 : 0);
         let leftHeight = userHeight + 10 + (lines.length * 45);
-        let rightHeight = hasPrice ? 130 : 0;
-        canvas.height = headerHeight + Math.max(leftHeight, rightHeight) + 10;
+        let rightHeight = hasPrice ? (finalQty > 1 ? 170 : 130) : 0;
+        canvas.height = headerHeight + Math.max(leftHeight, rightHeight) + 15;
 
         ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, canvas.height);
         ctx.fillStyle = "#000";
@@ -516,7 +558,6 @@ export function printLabel(
             ctx.textBaseline = "alphabetic";
             ctx.fillText(l, 10, textY, leftColWidth);
 
-            // Nếu vừa trên cùng dòng với tên khách
             if (lIdx === userLines.length - 1 && badgeFitsOnSameLine) {
                 const badgeX = 10 + lastUserLineWidth + 14;
                 const badgeY = textY - 43;
@@ -524,12 +565,19 @@ export function printLabel(
             }
         });
 
-        // Nếu tên khách dài không vừa cùng dòng thì vẽ ngay dòng bên dưới tên khách
         if (badgeNeedsOwnLine) {
             textY += 50;
             const badgeX = 10;
             const badgeY = textY - 43;
             drawBlackBadge(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeText);
+        }
+
+        if (hasSubInfo) {
+            textY += 32;
+            ctx.fillStyle = "#222";
+            ctx.font = "bold 24px Arial";
+            ctx.textAlign = "left";
+            ctx.fillText(subInfo, 10, textY, leftColWidth);
         }
         
         textY += 10;
@@ -539,12 +587,27 @@ export function printLabel(
         ctx.textBaseline = "alphabetic";
         if (lines.length > 0) lines.forEach(l => { textY += 45; ctx.fillText(l, 10, textY, leftColWidth); });
 
+        // Khung giá bên phải (Thống nhất chuẩn in cho mọi nguồn)
         if (hasPrice) {
             let priceText = pNum + ".000đ";
-            fitPriceFont(ctx, priceText, priceColWidth - 10, 110);
+            fitPriceFont(ctx, priceText, priceColWidth - 10, finalQty > 1 ? 88 : 110);
+            ctx.fillStyle = "#000";
             ctx.textAlign = "center";
             ctx.textBaseline = "alphabetic";
-            ctx.fillText(priceText, rightColX + priceColWidth / 2, startContentY + 75);
+            ctx.fillText(priceText, rightColX + priceColWidth / 2, startContentY + (finalQty > 1 ? 62 : 75));
+
+            // Nếu số lượng > 1 (ví dụ 71*2=142), in rõ ràng số lượng & đơn giá ngay bên dưới tổng tiền
+            if (finalQty > 1) {
+                ctx.font = "bold 26px Arial";
+                ctx.fillStyle = "#000";
+                ctx.textAlign = "center";
+                ctx.fillText(`(${finalUnitPrice}k x ${finalQty} = ${pNum}k)`, rightColX + priceColWidth / 2, startContentY + 102);
+
+                const slText = `SL: ${finalQty} CÁI`;
+                ctx.font = "900 24px Arial";
+                const slW = ctx.measureText(slText).width + 20;
+                drawBlackBadge(ctx, rightColX + (priceColWidth - slW) / 2, startContentY + 116, slW, 36, slText);
+            }
         }
 
         executePrint(canvas, platformLabel);
@@ -554,7 +617,7 @@ export function printLabel(
 }
 
 
-export function printMultipleLabels(labels: {user: string, content: string, priceValue: string | number, time: string, platformLabel: string, isGheLay?: boolean}[]) {
+export function printMultipleLabels(labels: {user: string, content: string, priceValue: string | number, time: string, platformLabel: string, isGheLay?: boolean, phone?: string, province?: string}[]) {
     try {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -576,8 +639,13 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
             const baseUser = cleanUserForPrint(label.user);
             ctx.font = "bold 35px Arial";
             const lines = (!label.content || label.content.trim() === "") ? [] : wrapText(ctx, label.content, leftColWidth);
-            let pNum = parseInt(label.priceValue as string) || 0;
-            let hasPrice = pNum > 0;
+            
+            const { unitPrice, quantity, totalPrice } = parsePriceAndQuantity(label.priceValue);
+            const pNum = totalPrice > 0 ? totalPrice : (unitPrice > 0 ? unitPrice : (parseInt(String(label.priceValue)) || 0));
+            const hasPrice = pNum > 0;
+            const finalQty = quantity;
+            const finalUnitPrice = unitPrice;
+
             ctx.font = "900 55px Arial";
             const userLines = wrapText(ctx, baseUser, leftColWidth);
 
@@ -585,13 +653,19 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
             const badgeFitsOnSameLine = isGheLay && (lastUserLineWidth + 14 + badgeWidth <= leftColWidth);
             const badgeNeedsOwnLine = isGheLay && !badgeFitsOnSameLine;
 
+            const subInfo = [
+                label.province ? `[${label.province}]` : '',
+                label.phone ? `SĐT: ${label.phone}` : ''
+            ].filter(Boolean).join('  •  ');
+            const hasSubInfo = Boolean(subInfo);
+
             let headerHeight = 110;
-            let userHeight = (userLines.length * 60) + (badgeNeedsOwnLine ? 50 : 0);
+            let userHeight = (userLines.length * 60) + (badgeNeedsOwnLine ? 50 : 0) + (hasSubInfo ? 36 : 0);
             let leftHeight = userHeight + 10 + (lines.length * 45);
-            let rightHeight = hasPrice ? 130 : 0;
-            let h = headerHeight + Math.max(leftHeight, rightHeight) + 10;
+            let rightHeight = hasPrice ? (finalQty > 1 ? 170 : 130) : 0;
+            let h = headerHeight + Math.max(leftHeight, rightHeight) + 15;
             totalHeight += h;
-            return { h, lines, userLines, hasPrice, pNum, isGheLay, badgeFitsOnSameLine, badgeNeedsOwnLine, lastUserLineWidth };
+            return { h, lines, userLines, hasPrice, pNum, finalQty, finalUnitPrice, isGheLay, badgeFitsOnSameLine, badgeNeedsOwnLine, lastUserLineWidth, subInfo, hasSubInfo };
         });
 
         canvas.height = totalHeight;
@@ -601,7 +675,7 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
         let currentY = 0;
 
         labels.forEach((label, idx) => {
-            const { h, lines, userLines, hasPrice, pNum, isGheLay, badgeFitsOnSameLine, badgeNeedsOwnLine, lastUserLineWidth } = heights[idx];
+            const { h, lines, userLines, hasPrice, pNum, finalQty, finalUnitPrice, badgeFitsOnSameLine, badgeNeedsOwnLine, lastUserLineWidth, subInfo, hasSubInfo } = heights[idx];
             let y = currentY + 45;
 
             ctx.textAlign = "center";
@@ -641,6 +715,14 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
                 drawBlackBadge(ctx, badgeX, badgeY, badgeWidth, badgeHeight, badgeText);
             }
 
+            if (hasSubInfo) {
+                textY += 32;
+                ctx.fillStyle = "#222";
+                ctx.font = "bold 24px Arial";
+                ctx.textAlign = "left";
+                ctx.fillText(subInfo, 10, textY, leftColWidth);
+            }
+
             textY += 10;
             ctx.fillStyle = "#000";
             ctx.font = "bold 35px Arial";
@@ -650,10 +732,23 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
 
             if (hasPrice) {
                 let priceText = pNum + ".000đ";
-                fitPriceFont(ctx, priceText, priceColWidth - 10, 110);
+                fitPriceFont(ctx, priceText, priceColWidth - 10, finalQty > 1 ? 88 : 110);
+                ctx.fillStyle = "#000";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "alphabetic";
-                ctx.fillText(priceText, rightColX + priceColWidth / 2, startContentY + 75);
+                ctx.fillText(priceText, rightColX + priceColWidth / 2, startContentY + (finalQty > 1 ? 62 : 75));
+
+                if (finalQty > 1) {
+                    ctx.font = "bold 26px Arial";
+                    ctx.fillStyle = "#000";
+                    ctx.textAlign = "center";
+                    ctx.fillText(`(${finalUnitPrice}k x ${finalQty} = ${pNum}k)`, rightColX + priceColWidth / 2, startContentY + 102);
+
+                    const slText = `SL: ${finalQty} CÁI`;
+                    ctx.font = "900 24px Arial";
+                    const slW = ctx.measureText(slText).width + 20;
+                    drawBlackBadge(ctx, rightColX + (priceColWidth - slW) / 2, startContentY + 116, slW, 36, slText);
+                }
             }
 
             currentY += h;
@@ -668,9 +763,9 @@ export function printMultipleLabels(labels: {user: string, content: string, pric
             }
         });
 
-        executePrint(canvas, labels[0]?.platformLabel || "");
+        executePrint(canvas, labels[0]?.platformLabel || "Facebook");
     } catch (e) {
-        console.error("Print failed", e);
+        console.error("Print multiple labels failed", e);
     }
 }
 

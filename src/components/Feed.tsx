@@ -17,6 +17,8 @@ interface FeedProps {
     onOpenPancakeLink?: (user: string, platform: Platform, initialSearch?: string) => void;
     onScroll?: (isDown: boolean) => void;
     onOpenManualOrder?: () => void;
+    onOpenPancakeLive?: () => void;
+    onOpenPancakePush?: (user: string, platform: Platform) => void;
 }
 
 interface CommentRowProps {
@@ -29,6 +31,7 @@ interface CommentRowProps {
     onOpenProfile: (user: string, platform: Platform) => void;
     onOpenPancakeLink?: (user: string, platform: Platform, initialSearch?: string) => void;
     onOpenQuickAssign?: (user: string, platform: Platform, commentPhone?: string) => void;
+    onOpenPancakePush?: (user: string, platform: Platform) => void;
 }
 
 export interface UserCommentGroup {
@@ -195,6 +198,7 @@ interface UserGroupRowProps {
     onOpenProfile: (user: string, platform: Platform) => void;
     onOpenPancakeLink?: (user: string, platform: Platform, initialSearch?: string) => void;
     onOpenQuickAssign?: (user: string, platform: Platform, commentPhone?: string) => void;
+    onOpenPancakePush?: (user: string, platform: Platform) => void;
 }
 
 const UserGroupRow = memo(function UserGroupRow({
@@ -209,7 +213,8 @@ const UserGroupRow = memo(function UserGroupRow({
     onOpenPrice,
     onOpenProfile,
     onOpenPancakeLink,
-    onOpenQuickAssign
+    onOpenQuickAssign,
+    onOpenPancakePush
 }: UserGroupRowProps) {
     const store = useStore();
     const pStore = store[g.platform] || store.tiktok;
@@ -548,7 +553,8 @@ const CommentRow = memo(function CommentRow({
     onOpenPrice,
     onOpenProfile,
     onOpenPancakeLink,
-    onOpenQuickAssign
+    onOpenQuickAssign,
+    onOpenPancakePush
 }: CommentRowProps) {
     const store = useStore();
     const pStore = store[c.platform] || store.tiktok;
@@ -561,7 +567,7 @@ const CommentRow = memo(function CommentRow({
     const nickname = pStore.nicknames?.[userName] || pStore.nicknames?.[c.user];
     const displayName = nickname ? `(${nickname}) ${userName}` : userName;
     const contentStr = typeof c.content === 'object' ? JSON.stringify(c.content) : String(c.content || '');
-    const detectedPhone = extractPhoneFromText(contentStr);
+    const detectedPhone = extractPhoneFromText(contentStr) || c.phone;
     const pancakeLink = pStore.pancakeLinks?.[userName];
     const extracted = extractPriceFromContent(contentStr);
     const flowPrice = pStore.flowPrice;
@@ -614,10 +620,27 @@ const CommentRow = memo(function CommentRow({
                             {userName}
                         </b>
                     </div>
+
+                    {/* Tag Thông tin khách từ Pancake / Hệ thống */}
+                    {c.orderCount !== undefined && c.orderCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0 inline-flex items-center gap-0.5 mx-0.5" title="Số đơn Pancake đã mua">
+                            <span>✓ {c.orderCount} đơn</span>
+                        </span>
+                    )}
+                    {c.totalSpend !== undefined && c.totalSpend > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-white/5 text-gray-300 border border-white/10 shrink-0 inline-flex items-center mx-0.5" title="Tổng chi tiêu Pancake">
+                            <span>{c.totalSpend.toLocaleString('vi-VN')} đ</span>
+                        </span>
+                    )}
                     {isCustomerNinhThuan(pStore.ninhThuanTags, userName) && (
                         <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 inline-flex items-center gap-1 mx-0.5" title="Khách Ninh Thuận">
                             <ThapChamIcon className="w-2.5 h-2.5" />
                             <span>Ninh Thuận</span>
+                        </span>
+                    )}
+                    {c.province && !c.province.includes('Ninh Thuận') && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-white/5 text-gray-300 border border-white/10 shrink-0 inline-flex items-center gap-1 mx-0.5">
+                            <span>{c.province}</span>
                         </span>
                     )}
                     {isCustomerGheLay(pStore.gheLayTags, userName, pStore.tags) && (
@@ -765,7 +788,7 @@ const CommentRow = memo(function CommentRow({
                     </button>
                 )}
 
-                {/* Nút IN: To, hình vuông, dễ bấm trên tablet */}
+                    {/* Nút IN: To, hình vuông, dễ bấm trên tablet */}
                 <button 
                     disabled={isBusy}
                     onClick={(e) => onPrint(c, e)}
@@ -804,7 +827,9 @@ export const Feed = memo(function Feed({
     onOpenProfile,
     onOpenPancakeLink,
     onScroll,
-    onOpenManualOrder
+    onOpenManualOrder,
+    onOpenPancakeLive,
+    onOpenPancakePush
 }: FeedProps) {
     const store = useStore();
     const parentRef = useRef<HTMLDivElement>(null);
@@ -1436,6 +1461,7 @@ export const Feed = memo(function Feed({
                                         onOpenPrice={onOpenPrice}
                                         onOpenProfile={onOpenProfile}
                                         onOpenPancakeLink={onOpenPancakeLink}
+                                        onOpenPancakePush={onOpenPancakePush}
                                         onOpenQuickAssign={(u, p, phone) => {
                                             if (onOpenPancakeLink) {
                                                 onOpenPancakeLink(u, p, phone);
@@ -1472,6 +1498,7 @@ export const Feed = memo(function Feed({
                                     onOpenPrice={onOpenPrice}
                                     onOpenProfile={onOpenProfile}
                                     onOpenPancakeLink={onOpenPancakeLink}
+                                    onOpenPancakePush={onOpenPancakePush}
                                     onOpenQuickAssign={(u, p, phone) => {
                                         if (onOpenPancakeLink) {
                                             onOpenPancakeLink(u, p, phone);

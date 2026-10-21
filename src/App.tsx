@@ -12,6 +12,7 @@ import { AutoCommentModal, useAutoComment } from './components/AutoComment';
 import { AutoCloseModal, useAutoClose } from './components/AutoClose';
 import { TikTokLiveModal } from './components/TikTokLiveModal';
 import { FacebookLiveModal } from './components/FacebookLiveModal';
+import { PancakeLiveStreamModal } from './components/PancakeLiveStreamModal';
 import { ClearFeedModal } from './components/ClearFeedModal';
 import { ResetSessionModal } from './components/ResetSessionModal';
 import { SmartLiveMonitor } from './components/SmartLiveMonitor';
@@ -38,6 +39,7 @@ import { PancakeLinkModal } from './components/PancakeLinkModal';
 import { PancakeSyncModal } from './components/PancakeSyncModal';
 import { openPancakeApp } from './lib/pancakeDeepLink';
 import { getCustomerInsight, getCustomerActivePastItems } from './lib/pancakeSync';
+import { autoDetectAndStartPancakeLive } from './lib/pancakeLiveClient';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const COMMANDS = [
@@ -87,6 +89,7 @@ export default function App() {
   const [tikTokStatus, setTikTokStatus] = useState<TikTokLiveStatus>(getTikTokStatus());
   const [showFacebookLiveModal, setShowFacebookLiveModal] = useState(false);
   const [facebookStatus, setFacebookStatus] = useState<FacebookLiveStatus>(getFacebookStatus());
+  const [showPancakeLiveModal, setShowPancakeLiveModal] = useState(false);
   const [showOrderPushSettingsModal, setShowOrderPushSettingsModal] = useState(false);
   const lastScrollLeftRef = useRef(0);
 
@@ -332,6 +335,7 @@ export default function App() {
   useEffect(() => {
     store.initPolling();
     scrubGhostItemsFromStore();
+    autoDetectAndStartPancakeLive();
     
     // Prevent screen sleep safely
     let wakeLockSentinel: any = null;
@@ -789,11 +793,26 @@ export default function App() {
                                     <div className="flex items-center justify-between">
                                         <span className="font-semibold">Cào Facebook Live</span>
                                         {facebookStatus.isConnected && (
-                                            <span className="text-[9px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded-full border border-blue-500/30">LIVE</span>
+                                             <span className="text-[9px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded-full border border-blue-500/30">LIVE</span>
                                         )}
                                     </div>
                                     <div className="text-[11px] text-gray-400">
                                         {facebookStatus.isConnected ? `${facebookStatus.target} (${facebookStatus.totalCommentsCount} cmt)` : 'Nhập link live / ID Fanpage'}
+                                    </div>
+                                </div>
+                            </button>
+                            <button 
+                                onClick={() => { setShowMenu(false); setShowPancakeLiveModal(true); }} 
+                                className="w-full text-left px-4 py-3 text-[14px] text-white hover:bg-white/10 flex items-center gap-3 bg-gradient-to-r from-orange-600/10 to-transparent border-b border-white/5 cursor-pointer"
+                            >
+                                <span className="text-xl">🥞</span>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-semibold text-orange-300">Bài viết & Live Pancake</span>
+                                        <span className="text-[9px] font-black bg-orange-500/20 text-orange-300 px-1.5 py-0.2 rounded-full border border-orange-500/30">MẪU IN THỐNG NHẤT</span>
+                                    </div>
+                                    <div className="text-[11px] text-gray-400">
+                                        Xem cmt bài Live • In đơn theo mẫu thống nhất
                                     </div>
                                 </div>
                             </button>
@@ -947,6 +966,10 @@ export default function App() {
                         onOpenPancakeLink={(user, platform, initialSearch) => {
                             setPancakeModalUser({ user, platform, initialSearch });
                         }}
+                        onOpenPancakePush={(user, platform) => {
+                            setPancakeModalUser({ user, platform });
+                        }}
+                        onOpenPancakeLive={() => setShowPancakeLiveModal(true)}
                         onScroll={handleContentScroll}
                         onOpenManualOrder={() => setIsManualModalOpen(true)}
                     />
@@ -1191,6 +1214,23 @@ export default function App() {
             onBack={() => {
                 setShowFacebookLiveModal(false);
                 setShowSmartLiveMonitor(true);
+            }}
+            onOpenPancakeLive={() => {
+                setShowFacebookLiveModal(false);
+                setShowPancakeLiveModal(true);
+            }}
+        />
+
+        <PancakeLiveStreamModal 
+            isOpen={showPancakeLiveModal}
+            onClose={() => setShowPancakeLiveModal(false)}
+            onOpenPrice={(id, u, p, defaultPrice) => {
+                setPendingPrint({ id, user: u, platform: p, defaultPrice });
+                setActiveModal('price');
+            }}
+            onOpenProfile={handleOpenProfile}
+            onOpenPancakePush={(u, p) => {
+                setPancakeModalUser({ user: u, platform: p });
             }}
         />
 
